@@ -7,6 +7,7 @@ import { loggerOptions } from './core/logger.ts';
 import { registerErrorHandler } from './core/middleware/error-handler.ts';
 import { iamRoutes } from './modules/iam/index.ts';
 import { financeRoutes } from './modules/finance/index.ts';
+import { approvalRoutes } from './modules/approval/index.ts';
 import { checkHealth } from './core/health.ts';
 
 export function buildApp() {
@@ -29,6 +30,7 @@ export function buildApp() {
     async (api) => {
       await iamRoutes(api);
       await financeRoutes(api);
+      await approvalRoutes(api);
     },
     { prefix: '/api/v1' },
   );

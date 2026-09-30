@@ -1,20 +1,21 @@
+import { UnprocessableError } from '../../core/errors/app-error.ts';
 import { sumMinorUnits } from '../../core/money.ts';
 import type { JournalInput, JournalLineInput } from './finance.types.ts';
 
 // Pure validation of a journal before persistence: double-entry balance rules.
 export function validateJournalBalance(lines: readonly JournalLineInput[]): void {
   if (lines.length < 2) {
-    throw new Error('Jurnal harus memiliki minimal 2 baris (debit dan kredit)');
+    throw new UnprocessableError('Jurnal harus memiliki minimal 2 baris (debit dan kredit)');
   }
 
   const totalDebit = sumMinorUnits(lines.map((line) => line.debit));
   const totalCredit = sumMinorUnits(lines.map((line) => line.credit));
 
   if (totalDebit !== totalCredit) {
-    throw new Error('Jurnal tidak balance (debit ≠ kredit)');
+    throw new UnprocessableError('Jurnal tidak balance (debit ≠ kredit)');
   }
   if (totalDebit === 0n) {
-    throw new Error('Jurnal tidak boleh bernilai nol');
+    throw new UnprocessableError('Jurnal tidak boleh bernilai nol');
   }
 }
 
@@ -29,7 +30,7 @@ export function buildReversalLines(lines: readonly JournalLineInput[]): JournalL
 
 export function assertJournalInput(input: JournalInput): void {
   if (!input.description.trim()) {
-    throw new Error('Deskripsi jurnal wajib diisi');
+    throw new UnprocessableError('Deskripsi jurnal wajib diisi');
   }
   validateJournalBalance(input.lines);
 }
