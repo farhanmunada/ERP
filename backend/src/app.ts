@@ -6,6 +6,7 @@ import { env } from './core/config/env.ts';
 import { loggerOptions } from './core/logger.ts';
 import { registerErrorHandler } from './core/middleware/error-handler.ts';
 import { iamRoutes } from './modules/iam/index.ts';
+import { financeRoutes } from './modules/finance/index.ts';
 
 export function buildApp() {
   const app = Fastify({ logger: loggerOptions });
@@ -21,6 +22,7 @@ export function buildApp() {
   app.register(
     async (api) => {
       await iamRoutes(api);
+      await financeRoutes(api);
     },
     { prefix: '/api/v1' },
   );
