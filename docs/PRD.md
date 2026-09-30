@@ -706,8 +706,8 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 
 | Slice | Isi | Status |
 |---|---|---|
-| **P0a** | Bootstrap + IAM & Org Unit + COA + GL double-entry engine + Audit Trail + Outbox | Slice pertama (setelah Gerbang 1 & 2) |
-| P0b | Inventory (stock, movement, transfer, opname, valuasi) | Menyusul |
+| **P0a** | Bootstrap + IAM & Org Unit + COA + GL double-entry engine + Audit Trail + Outbox | ✅ Selesai |
+| P0b | Inventory (stock, movement, transfer, opname, valuasi) | ✅ Selesai (Moving Average + FIFO, batch/serial, opname→jurnal) |
 | P0c | Procurement (PR→PO→GRN→Bill + 3-way matching) | Menyusul |
 | P0d | Sales (Quotation→SO→DO→Invoice + credit + reserve) | Menyusul |
 | P1 | Payment AR/AP, Payment Gateway, gRPC, Tax API, field/row-level RBAC, CQRS | Di luar P0 |

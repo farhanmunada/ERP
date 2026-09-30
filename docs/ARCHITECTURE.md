@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — ERP Modular (Retail/Distribusi)
 
-> Status: **APPROVED ✅ (Gerbang 2 lulus) — Slice P0a SELESAI diimplementasi (kode di `backend/` & `frontend/`)**
+> Status: **APPROVED ✅ (Gerbang 2 lulus) — Slice P0a SELESAI; Slice P0b (Inventory) SELESAI diimplementasi (kode di `backend/` & `frontend/`)**
 > Bahasa: Indonesia (istilah teknis/identifier tetap English).
 > Basis: `docs/PRD.md` (APPROVED), `docs/RESEARCH.md`, `docs/ADR/`.
 > Versi: 1.0.0 · Fase: 4 (Task Decomposition & Architecture Planning)
@@ -364,3 +364,27 @@ DILARANG circular dependency. Antar-modul hanya via `index.ts`.
 - `BUG-20260930-02` TypeScript 7 hapus `baseUrl`
 - `BUG-20260930-03` import path spec co-located
 - `BUG-20260930-04` domain validation plain Error → 500 (harus 422)
+
+---
+
+## 11. Status Implementasi Slice P0b — Inventory (Per 2026-09-30)
+
+| Task | Status | Bukti |
+|---|---|---|
+| Schema inventory (8 tabel: items, warehouse_stock, stock_movements, item_cost_layers, item_serials, stock_transfers, stock_opnames, stock_opname_lines) | ✅ | `0001_wide_kate_bishop.sql` + `0002_jazzy_kid_colt.sql` ter-generate |
+| Core helpers (qty fixed-point, dead-lock retry, stock-row locking) | ✅ | `core/qty.ts`, `core/database/transaction.ts`, `stock.helpers.ts` |
+| Costing engine (Moving Average + FIFO pure functions) | ✅ | 7 unit tests pass (PRD 2.3.1 + 2.3.2) |
+| Item service (CRUD master item) | ✅ | tsc 0 |
+| Stock service (stock-in/out + costing + audit + outbox) | ✅ | DB smoke: MA avg=11000, FIFO COGS=1600000 |
+| Transfer service (create in-transit + complete) | ✅ | DB smoke: available=170 saat in-transit, A=170 B=30 saat complete |
+| Opname service (adjustment + auto journal) | ✅ | DB smoke: opname journal ter-generate, TB balanced |
+| Batch/serial tracking (validation + storage) | ✅ | API smoke: tanpa Idempotency-Key→400 |
+| Idempotency middleware (withIdempotency pattern) | ✅ | API smoke: replay mengembalikan movementId sama |
+| Endpoint warehouses dropdown | ✅ | GET /api/v1/warehouses |
+| Frontend: Items, Stock, Movements, Transfer, Opname pages | ✅ | vite build OK (94 modules) |
+| Verifikasi Tier 1 & Tier 2 | ✅ | tsc 0 · 24 unit test · DB smoke LULUS · API smoke LULUS · vite build OK |
+
+### Bug P0b (ditemukan & diperbaiki)
+- **BUG-20260930-09** FIFO layer non-deterministik (created_at tie → UUID sort membalik urutan layer → HPP salah). Perbaikan: kolom `seq BIGINT AUTO_INCREMENT` pada `stock_movements` dan `item_cost_layers` untuk urutan total pasti.
+- **BUG-20260930-10** Idempotency replay mengeksekusi side-effect dobel (`replyIdempotent` memanggil `produce()` dulu baru cek replay). Perbaikan: pola `withIdempotency` yang cek replay **sebelum** `produce()`.
+- **BUG-20260930-11** Migrasi 0002 gagal separuh di MySQL (`ALTER TABLE ADD seq AUTO_INCREMENT` tanpa UNIQUE di statement terpisah → error 1075). Perbaikan: gabung kolom + constraint dalam satu `ALTER TABLE`; repair manual DB live.

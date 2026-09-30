@@ -74,6 +74,10 @@ export async function logout(rawToken: string): Promise<void> {
   await repo.revokeRefreshToken(hashToken(rawToken), new Date().toISOString());
 }
 
+export async function listWarehouses(companyId: string) {
+  return repo.listWarehouses(companyId);
+}
+
 export async function createCompany(input: CreateCompanyInput, ctx: AuditContext): Promise<string> {
   const existing = await repo.findCompanyByCode(input.code);
   if (existing) throw new ConflictError(`Kode company "${input.code}" sudah digunakan`);

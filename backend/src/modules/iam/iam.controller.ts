@@ -80,6 +80,10 @@ export async function meHandler(request: FastifyRequest, reply: FastifyReply): P
   reply.status(200).send(ok(request.authUser ?? null));
 }
 
+export async function listWarehousesHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  reply.status(200).send(ok(await service.listWarehouses(request.authUser?.companyId ?? '')));
+}
+
 export function auditContext(request: FastifyRequest) {
   return {
     companyId: request.authUser?.companyId ?? ((request.headers['x-company-id'] as string | undefined) ?? ''),

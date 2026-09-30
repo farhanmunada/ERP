@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { db } from '../database/client.ts';
 import { ConflictError, ValidationError } from '../errors/app-error.ts';
+import { ok } from '../http/response.ts';
 import { idempotencyKeys } from '../../db/schema/shared.schema.ts';
 
 const HEADER = 'idempotency-key';
@@ -75,4 +76,27 @@ declare module 'fastify' {
   interface FastifyRequest {
     idempotentReplay?: StoredIdempotentResponse;
   }
+}
+
+// Runs an idempotent mutation: replays a stored response, otherwise executes `produce` exactly once
+// and stores its result. The replay check happens BEFORE produce() so side effects never run twice.
+export async function withIdempotency<T>(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  produce: () => Promise<T>,
+  status = 201,
+): Promise<void> {
+  if (request.idempotentReplay) {
+    reply.status(request.idempotentReplay.status).send(request.idempotentReplay.body);
+    return;
+  }
+
+  const data = await produce();
+  const body = ok(data);
+  const key = readIdempotencyKey(request);
+  const userId = request.authUser?.userId;
+  if (key && userId) {
+    await storeResponse(key, userId, request.url, hashRequest(request.body), { status, body });
+  }
+  reply.status(status).send(body);
 }

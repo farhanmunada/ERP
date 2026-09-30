@@ -47,3 +47,10 @@ export async function createAccount(input: CreateAccountInput): Promise<string> 
 export async function listAccounts(companyId: string) {
   return repo.listAccounts(companyId);
 }
+
+// Resolves a standard COA code to its account id; used by other modules (e.g. inventory opname journal).
+export async function resolveAccountId(companyId: string, code: string): Promise<string> {
+  const account = await repo.findAccountByCode(companyId, code);
+  if (!account) throw new NotFoundError('Account', code);
+  return account.id;
+}

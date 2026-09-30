@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import type { ComponentType, SVGProps } from 'react';
 
 import { useAuth } from '../features/auth/index.ts';
 import {
@@ -8,14 +9,43 @@ import {
   IconJournal,
   IconReports,
   IconLogout,
+  IconBox,
+  IconWarehouse,
+  IconArrows,
+  IconClipboard,
+  IconList,
 } from '../shared/components/icons.tsx';
 
-const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: IconDashboard },
-  { to: '/finance/coa', label: 'Bagan Akun (COA)', icon: IconBook },
-  { to: '/finance/journals', label: 'Jurnal Umum', icon: IconJournal },
-  { to: '/finance/reports', label: 'Laporan Keuangan', icon: IconReports },
-] as const;
+interface NavItem {
+  readonly to: string;
+  readonly label: string;
+  readonly icon: ComponentType<SVGProps<SVGSVGElement>>;
+}
+
+const NAV_SECTIONS: readonly { readonly title: string; readonly items: readonly NavItem[] }[] = [
+  {
+    title: 'Menu Utama',
+    items: [{ to: '/dashboard', label: 'Dashboard', icon: IconDashboard }],
+  },
+  {
+    title: 'Persediaan',
+    items: [
+      { to: '/inventory/items', label: 'Master Item', icon: IconBox },
+      { to: '/inventory/stock', label: 'Stok', icon: IconWarehouse },
+      { to: '/inventory/movements', label: 'Mutasi Stok', icon: IconList },
+      { to: '/inventory/transfer', label: 'Transfer Gudang', icon: IconArrows },
+      { to: '/inventory/opname', label: 'Stock Opname', icon: IconClipboard },
+    ],
+  },
+  {
+    title: 'Keuangan',
+    items: [
+      { to: '/finance/coa', label: 'Bagan Akun (COA)', icon: IconBook },
+      { to: '/finance/journals', label: 'Jurnal Umum', icon: IconJournal },
+      { to: '/finance/reports', label: 'Laporan Keuangan', icon: IconReports },
+    ],
+  },
+];
 
 export function AppShell() {
   const { user, logout } = useAuth();
@@ -49,36 +79,40 @@ export function AppShell() {
             </div>
           </div>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
-            P0a
+            P0b
           </span>
         </div>
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-            Menu Utama
-          </p>
-          <nav className="space-y-1">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
-                      isActive
-                        ? 'bg-primary text-white shadow-sm shadow-primary/30'
-                        : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
-                    }`
-                  }
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
-          </nav>
+          {NAV_SECTIONS.map((section) => (
+            <div key={section.title} className="mb-4">
+              <p className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
+                {section.title}
+              </p>
+              <nav className="space-y-1">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+                          isActive
+                            ? 'bg-primary text-white shadow-sm shadow-primary/30'
+                            : 'text-slate-400 hover:bg-slate-800/70 hover:text-white'
+                        }`
+                      }
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </nav>
+            </div>
+          ))}
         </div>
 
         {/* User Card */}

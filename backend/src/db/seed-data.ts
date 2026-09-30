@@ -28,5 +28,23 @@ export const DEFAULT_COA = [
 ] as const;
 
 export const DEFAULT_COMPANY_ID = '00000000-0000-4000-8000-000000000001';
+export const DEFAULT_BRANCH_ID = '00000000-0000-4000-8000-000000000002';
+export const DEFAULT_WAREHOUSE_ID = '00000000-0000-4000-8000-000000000003';
+export const SECOND_WAREHOUSE_ID = '00000000-0000-4000-8000-000000000004';
 export const DEFAULT_ADMIN_EMAIL = 'admin@erp.local';
 export const DEFAULT_ADMIN_PASSWORD = 'admin12345';
+
+export const DEFAULT_BRANCH = { code: 'PST', name: 'Kantor Pusat' } as const;
+
+export const DEFAULT_WAREHOUSES = [
+  { id: DEFAULT_WAREHOUSE_ID, code: 'GD-UTAMA', name: 'Gudang Utama' },
+  { id: SECOND_WAREHOUSE_ID, code: 'GD-CABANG', name: 'Gudang Cabang' },
+] as const;
+
+// Sample master items covering both costing methods and batch/serial tracking.
+export const DEFAULT_ITEMS = [
+  { code: 'ITM-001', name: 'Kopi Arabika 1kg', uom: 'KG', costingMethod: 'MOVING_AVERAGE', trackBatch: false, trackSerial: false, reorderPoint: '20' },
+  { code: 'ITM-002', name: 'Gula Pasir 1kg', uom: 'KG', costingMethod: 'FIFO', trackBatch: false, trackSerial: false, reorderPoint: '15' },
+  { code: 'ITM-003', name: 'Susu UHT 1L (Batch)', uom: 'PCS', costingMethod: 'MOVING_AVERAGE', trackBatch: true, trackSerial: false, reorderPoint: '10' },
+  { code: 'ITM-004', name: 'Mesin Espresso Pro (Serial)', uom: 'UNIT', costingMethod: 'FIFO', trackBatch: false, trackSerial: true, reorderPoint: '1' },
+] as const;

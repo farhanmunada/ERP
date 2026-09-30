@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
+
 import { buildApp } from '../app.ts';
 import { pool } from '../core/database/client.ts';
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD, DEFAULT_COMPANY_ID } from './seed-data.ts';
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD, DEFAULT_COMPANY_ID, DEFAULT_WAREHOUSE_ID } from './seed-data.ts';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`API SMOKE FAIL: ${message}`);
@@ -70,6 +72,58 @@ try {
   console.log('[6] GET trial-balance → seimbang');
   const tb = await app.inject({ method: 'GET', url: '/api/v1/finance/reports/trial-balance', headers: authHeaders });
   assert(tb.statusCode === 200 && tb.json().data.balanced === true, 'trial balance seimbang');
+
+  console.log('[7] GET /items → item seed ter-load');
+  const itemsRes = await app.inject({ method: 'GET', url: '/api/v1/items', headers: authHeaders });
+  assert(itemsRes.statusCode === 200, `items 200 (dapat ${itemsRes.statusCode})`);
+  const itemList = itemsRes.json().data as { id: string; code: string }[];
+  assert(itemList.length >= 4, `item seed ter-load (${itemList.length})`);
+  const kopi = itemList.find((item) => item.code === 'ITM-001') as { id: string };
+
+  console.log('[8] POST /inventory/stock-in tanpa Idempotency-Key → 400');
+  const noKey = await app.inject({
+    method: 'POST',
+    url: '/api/v1/inventory/stock-in',
+    headers: authHeaders,
+    payload: { itemId: kopi.id, warehouseId: DEFAULT_WAREHOUSE_ID, quantity: '10', unitCost: '10000' },
+  });
+  assert(noKey.statusCode === 400, `tanpa idempotency key ditolak (dapat ${noKey.statusCode})`);
+
+  console.log('[9] POST /inventory/stock-in dengan Idempotency-Key → 201, replay sama');
+  const beforeRes = await app.inject({
+    method: 'GET',
+    url: `/api/v1/inventory/stock?itemId=${kopi.id}&warehouseId=${DEFAULT_WAREHOUSE_ID}`,
+    headers: authHeaders,
+  });
+  const beforeOnHand = Number(beforeRes.json().data[0]?.onHand ?? '0');
+
+  const stockKey = randomUUID();
+  const stockInPayload = { itemId: kopi.id, warehouseId: DEFAULT_WAREHOUSE_ID, quantity: '10', unitCost: '10000' };
+  const stockInRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/inventory/stock-in',
+    headers: { ...authHeaders, 'idempotency-key': stockKey },
+    payload: stockInPayload,
+  });
+  assert(stockInRes.statusCode === 201, `stock-in 201 (dapat ${stockInRes.statusCode})`);
+  const firstMovement = stockInRes.json().data.movementId as string;
+
+  const replay = await app.inject({
+    method: 'POST',
+    url: '/api/v1/inventory/stock-in',
+    headers: { ...authHeaders, 'idempotency-key': stockKey },
+    payload: stockInPayload,
+  });
+  assert(replay.json().data.movementId === firstMovement, 'replay mengembalikan movement yang sama (idempotent)');
+
+  console.log('[10] GET /inventory/stock → on-hand naik 10');
+  const stock = await app.inject({
+    method: 'GET',
+    url: `/api/v1/inventory/stock?itemId=${kopi.id}&warehouseId=${DEFAULT_WAREHOUSE_ID}`,
+    headers: authHeaders,
+  });
+  const afterOnHand = Number(stock.json().data[0]?.onHand ?? '0');
+  assert(stock.statusCode === 200 && afterOnHand === beforeOnHand + 10, `on-hand ${beforeOnHand} → ${afterOnHand}`);
 
   console.log('\nAPI SMOKE TEST: LULUS');
 } finally {

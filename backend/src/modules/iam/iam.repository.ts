@@ -67,6 +67,20 @@ export async function insertWarehouse(values: typeof warehouses.$inferInsert) {
   await db.insert(warehouses).values(values);
 }
 
+export async function listWarehouses(companyId: string) {
+  return db
+    .select({
+      id: warehouses.id,
+      branchId: warehouses.branchId,
+      code: warehouses.code,
+      name: warehouses.name,
+      isActive: warehouses.isActive,
+    })
+    .from(warehouses)
+    .where(eq(warehouses.companyId, companyId))
+    .orderBy(warehouses.code);
+}
+
 export async function insertRole(values: typeof roles.$inferInsert) {
   await db.insert(roles).values(values);
 }

@@ -4,10 +4,10 @@ Sistem ERP modular berbasis web/API sebagai *single source of truth* operasional
 
 ## Status
 
-- **Fase:** Slice P0a (IAM + Org + GL Engine + Approval) — **selesai & terverifikasi**.
+- **Fase:** Slice **P0a** (IAM + Org + GL Engine + Approval) & **P0b** (Inventory: stock, movement, transfer, opname, valuasi Moving Average + FIFO, batch/serial) — **selesai & terverifikasi**.
 - **Infra:** MySQL lokal (Laragon). **Tanpa Docker** — lihat `docs/ADR/0002`.
-- **Tier 1:** typecheck 0 error, 17 unit test pass, frontend build sukses.
-- **Tier 2:** migrasi + smoke test DB nyata **LULUS** (MySQL 8.4.3, 21 tabel, API smoke hijau).
+- **Tier 1:** typecheck 0 error, 24 unit test pass, frontend build sukses.
+- **Tier 2:** migrasi + smoke test DB nyata **LULUS** (MySQL 8.4.3, 28 tabel, DB smoke + API smoke hijau).
 
 ## Dokumen
 
@@ -38,7 +38,7 @@ cd backend
 Copy-Item .env.example .env   # sesuaikan DATABASE_URL ke MySQL lokal
 bun install
 bun run db:migrate            # buat tabel
-bun run db:seed               # company DEMO + admin + 10 akun COA
+bun run db:seed               # company DEMO + admin + 10 akun COA + 2 gudang + 4 item contoh
 bun run dev                   # http://localhost:3000  (predev otomatis bebaskan port 3000)
 
 # 3. Frontend

@@ -8,6 +8,20 @@
       "when": 1790732035042,
       "tag": "0000_silky_cammi",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1790738573014,
+      "tag": "0001_wide_kate_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790738951124,
+      "tag": "0002_jazzy_kid_colt",
+      "breakpoints": true
     }
   ]
 }
