@@ -23,7 +23,8 @@ export const auditLogs = mysqlTable(
   ],
 );
 
-// Transactional outbox: written in the same DB transaction as business data, relayed to RabbitMQ.
+// Transactional outbox: written in the same DB transaction as business data.
+// Relay to a broker (RabbitMQ) is deferred to P1 — see docs/ADR/0002-tanpa-docker-lokal.md.
 export const outboxEvents = mysqlTable(
   'outbox_events',
   {

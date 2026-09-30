@@ -2,9 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { PageHeader } from '../../shared/components/PageHeader.tsx';
 import { createAccount, listAccounts } from './finance.api.ts';
 
 const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const;
+
+const TYPE_LABELS: Record<string, string> = {
+  ASSET: 'Aset',
+  LIABILITY: 'Liabilitas',
+  EQUITY: 'Ekuitas',
+  REVENUE: 'Pendapatan',
+  EXPENSE: 'Beban',
+};
 
 export function CoaPage() {
   const queryClient = useQueryClient();
@@ -30,53 +39,80 @@ export function CoaPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Chart of Accounts</h1>
+      <PageHeader
+        title="Bagan Akun"
+        description="Struktur akun buku besar perusahaan."
+        actions={<span className="font-mono text-xs text-muted">{accounts?.length ?? 0} akun</span>}
+      />
 
-      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-4 shadow-sm">
-        <label className="flex flex-col text-sm text-muted">
+      <form onSubmit={handleSubmit} className="panel flex flex-wrap items-end gap-3 p-4">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
           Kode
-          <input value={code} onChange={(e) => setCode(e.target.value)} required className="mt-1 rounded-[var(--radius-base)] border border-border px-3 py-2 text-text" />
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+            className="field font-mono w-28"
+            placeholder="1-1000"
+          />
         </label>
-        <label className="flex flex-col text-sm text-muted">
-          Nama
-          <input value={name} onChange={(e) => setName(e.target.value)} required className="mt-1 rounded-[var(--radius-base)] border border-border px-3 py-2 text-text" />
+        <label className="flex min-w-[200px] flex-1 flex-col gap-1.5 text-sm font-medium">
+          Nama Akun
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="field"
+            placeholder="Kas"
+          />
         </label>
-        <label className="flex flex-col text-sm text-muted">
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
           Tipe
-          <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 rounded-[var(--radius-base)] border border-border px-3 py-2 text-text">
+          <select value={type} onChange={(e) => setType(e.target.value)} className="field">
             {ACCOUNT_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {TYPE_LABELS[t]}
+              </option>
             ))}
           </select>
         </label>
-        <button type="submit" disabled={mutation.isPending} className="rounded-[var(--radius-base)] bg-primary px-4 py-2 text-primary-fg disabled:opacity-60">
+        <button type="submit" disabled={mutation.isPending} className="btn-primary">
           {mutation.isPending ? 'Menyimpan…' : 'Tambah Akun'}
         </button>
-        {mutation.isError ? <span className="text-sm text-danger">{mutation.error.message}</span> : null}
+        {mutation.isError ? (
+          <span className="text-sm text-danger">{mutation.error.message}</span>
+        ) : null}
       </form>
 
       {isLoading ? <p className="text-sm text-muted">Memuat…</p> : null}
       {error ? <p className="text-sm text-danger">{error.message}</p> : null}
 
-      <div className="overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface shadow-sm">
+      <div className="panel overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-bg text-left text-muted">
+          <thead className="table-head">
             <tr>
-              <th className="px-4 py-2">Kode</th>
-              <th className="px-4 py-2">Nama</th>
-              <th className="px-4 py-2">Tipe</th>
-              <th className="px-4 py-2">Saldo Normal</th>
+              <th className="px-5 py-3 font-mono">KODE</th>
+              <th className="px-5 py-3">NAMA</th>
+              <th className="px-5 py-3">TIPE</th>
+              <th className="px-5 py-3">SALDO NORMAL</th>
             </tr>
           </thead>
           <tbody>
             {(accounts ?? []).map((account) => (
-              <tr key={account.id} className="border-t border-border">
-                <td className="tabular px-4 py-2">{account.code}</td>
-                <td className="px-4 py-2">{account.name}</td>
-                <td className="px-4 py-2">{account.type}</td>
-                <td className="px-4 py-2">{account.normalBalance}</td>
+              <tr key={account.id} className="border-b border-border last:border-0 hover:bg-canvas">
+                <td className="tabular px-5 py-3 font-mono text-xs">{account.code}</td>
+                <td className="px-5 py-3">{account.name}</td>
+                <td className="px-5 py-3 text-muted">{TYPE_LABELS[account.type] ?? account.type}</td>
+                <td className="px-5 py-3 text-muted">{account.normalBalance}</td>
               </tr>
             ))}
+            {(accounts ?? []).length === 0 && !isLoading ? (
+              <tr>
+                <td colSpan={4} className="px-5 py-10 text-center text-sm text-muted">
+                  Belum ada akun. Tambahkan akun pertama Anda di atas.
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

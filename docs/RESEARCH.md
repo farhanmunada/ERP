@@ -148,8 +148,8 @@ Mengikuti konvensi umum (NetSuite, Sage, Microsoft Business Central):
 | ORM / Query Builder | **Drizzle ORM** (dialect `mysql2`) | Dukungan MySQL resmi (docs.drizzle.team/docs/mysql) |
 | Migrasi | **drizzle-kit** | Generate & apply migration dari schema TS |
 | Validasi DTO | **Zod** | Type-safe boundary validation (rujukan vault: system-design) |
-| Event Broker | **RabbitMQ** (via `amqplib`) | Sesuai brief; vault punya memori bug amqplib (lihat §6) |
-| Cache / Lock | **Redis** | Untuk cache read & distributed lock opsional |
+| Event Broker | **RabbitMQ** (via `amqplib`) — *ditunda ke P1 (ADR-0002)* | Sesuai brief; vault punya memori bug amqplib (lihat §6) |
+| Cache / Lock | **Redis** — *tidak dipakai di P0 (ADR-0002)* | Untuk cache read & distributed lock opsional |
 | Auth | **JWT + refresh token (httpOnly cookie)** | Keputusan operator |
 
 > **Catatan Bun.SQL vs mysql2:** Bun 1.2.21+ menyediakan driver MySQL native (`bun:sql`). Namun Drizzle hanya mengikat resmi ke `mysql2` untuk dialect MySQL. **Keputusan: pakai `mysql2`** agar integrasi Drizzle stabil. (Riset: Bun Blog v1.2.21, Drizzle docs.)
@@ -171,8 +171,10 @@ Mengikuti konvensi umum (NetSuite, Sage, Microsoft Business Central):
 
 | Komponen | Pilihan |
 |---|---|
-| Orkestrasi dev | **docker-compose** (MySQL 8.0, Redis, RabbitMQ) |
+| Database dev | **MySQL lokal via Laragon** (`127.0.0.1:3306`) |
 | Aplikasi | Dijalankan di host (Bun) |
+
+> **Revisi (ADR-0002):** rencana awal **docker-compose (MySQL/Redis/RabbitMQ)** dibatalkan. Audit Slice P0a menemukan Redis tak terpakai dan broker hanya dipakai relay yang belum dibutuhkan P0. Dev kini **tanpa Docker**; relay outbox ke broker ditunda ke P1. Lihat `docs/ADR/0002-tanpa-docker-lokal.md`.
 
 ---
 
@@ -276,7 +278,7 @@ Hasil `grep` di `C:\Users\vola\agentVault\06-Bug-Solutions\INDEX-BUGS.md`: **7 a
 
 ## 10. Kesimpulan Riset
 
-1. Projek greenfield; stack backend **Bun + Fastify + Drizzle(mysql2) + MySQL 8.0.16+ + RabbitMQ + Redis**, frontend **React + Vite + Tailwind + shadcn**.
+1. Projek greenfield; stack backend **Bun + Fastify + Drizzle(mysql2) + MySQL 8.0.16+** (Redis/RabbitMQ **ditunda ke P1** — ADR-0002), frontend **React + Vite + Tailwind + shadcn**.
 2. Target industri **retail/distribusi** menyederhanakan COA (tanpa WIP/BOM).
 3. Penyimpangan Postgres→MySQL **layak** selama 8.0.16+ dan pola §4.3 dipatuhi.
 4. Empat pola kritis (Idempotency, Outbox, Append-only ledger, Locking order) menjadi tulang punggung P0.

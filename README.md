@@ -5,6 +5,7 @@ Sistem ERP modular berbasis web/API sebagai *single source of truth* operasional
 ## Status
 
 - **Fase:** Slice P0a (IAM + Org + GL Engine + Approval) — **selesai & terverifikasi**.
+- **Infra:** MySQL lokal (Laragon). **Tanpa Docker** — lihat `docs/ADR/0002`.
 - **Tier 1:** typecheck 0 error, 17 unit test pass, frontend build sukses.
 - **Tier 2:** migrasi + smoke test DB nyata **LULUS** (MySQL 8.4.3, 21 tabel, API smoke hijau).
 
@@ -29,21 +30,18 @@ docs/       Dokumen proyek
 ## Menjalankan (dev)
 
 ```powershell
-# 1. Database: MySQL 8.0.16+ (lokal via Laragon, atau `docker compose up -d mysql redis rabbitmq`)
+# 1. Database: MySQL 8.0.16+ (lokal via Laragon). Docker TIDAK dipakai (lihat docs/ADR/0002).
 #    Laragon default: root tanpa password, buat database `erp`.
 
 # 2. Backend
 cd backend
 Copy-Item .env.example .env   # sesuaikan DATABASE_URL ke MySQL lokal
 bun install
-bun run db:migrate            # buat 20 tabel
+bun run db:migrate            # buat tabel
 bun run db:seed               # company DEMO + admin + 10 akun COA
 bun run dev                   # http://localhost:3000  (predev otomatis bebaskan port 3000)
 
-# 3. Outbox relay (terminal terpisah, butuh RabbitMQ)
-cd backend; bun run relay
-
-# 4. Frontend
+# 3. Frontend
 cd frontend
 bun install
 bun run dev                   # http://localhost:5173
@@ -64,6 +62,6 @@ bun run dev                   # http://localhost:5173
 | `401` saat login | Backend hidup, tapi Company ID salah/kosong | Isi Company ID `00000000-0000-4000-8000-000000000001` |
 | `Failed to start server. Is port 3000 in use?` | Proses lama (zombie) masih mengunci port | Otomatis ditangani `predev`; manual: `bun run ../scripts/free-port.ts 3000 5173` |
 | Log menampilkan 3 baris "Server listening at ..." (127.0.0.1 / 10.x / 172.x) | **Normal** — satu server bind ke semua network interface (`0.0.0.0`) | Pakai `http://localhost:3000` |
-| Docker error | Docker **tidak wajib**; MySQL Laragon sudah cukup | Abaikan Docker (hanya untuk Redis/RabbitMQ) |
+| Butuh Redis/RabbitMQ? | **Tidak.** Docker & broker tidak dipakai di P0 (lihat `docs/ADR/0002`) | Cukup MySQL Laragon |
 
 **Catatan:** `bun run dev` di backend & frontend otomatis menjalankan `predev` yang membebaskan port 3000/5173 dari proses zombie sebelum start.

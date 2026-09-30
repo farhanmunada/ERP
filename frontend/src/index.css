@@ -1,23 +1,29 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-primary: #1e3a8a;
-  --color-primary-fg: #ffffff;
-  --color-accent: #0ea5e9;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
+  /* "Ink & Ledger" — palette for a retail/distribution finance console.
+     Deliberately avoids the generic indigo SaaS look: cool canvas, ink chrome,
+     a single teal signature accent for money/positive figures. */
+  --color-ink: #0b1220;
+  --color-ink-soft: #1a2336;
+  --color-canvas: #eef1f5;
   --color-surface: #ffffff;
-  --color-bg: #f8fafc;
-  --color-border: #e2e8f0;
-  --color-text: #0f172a;
-  --color-muted: #64748b;
+  --color-border: #d6dde6;
+  --color-border-strong: #b9c3d0;
+  --color-text: #101826;
+  --color-muted: #5b6675;
+  --color-accent: #0f766e;
+  --color-accent-strong: #0b5f59;
+  --color-accent-fg: #ffffff;
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
 
-  --radius-base: 8px;
-  --radius-lg: 12px;
+  --radius-base: 6px;
+  --radius-lg: 10px;
 
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter Tight', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 :root {
@@ -26,11 +32,56 @@
 
 body {
   margin: 0;
-  font-family: var(--font-sans);
-  background: var(--color-bg);
+  background: var(--color-canvas);
   color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.tabular {
+/* Money, quantities, and codes must align vertically in columns. */
+@utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-base);
+}
+
+/* ponytail: the global reset below is the documented exception for !important. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@layer components {
+  .field {
+    @apply rounded-base border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted;
+  }
+
+  .field-mono {
+    @apply tabular rounded-base border border-border bg-surface px-3 py-2 text-right font-mono text-sm text-text;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-base bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-base border border-border bg-surface px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .panel {
+    @apply rounded-lg border border-border bg-surface;
+  }
+
+  .table-head {
+    @apply border-b border-border text-left text-xs font-semibold text-muted;
+  }
 }

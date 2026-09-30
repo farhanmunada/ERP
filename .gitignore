@@ -34,7 +34,3 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
-
-# Docker volumes / local data
-.docker-data/
-mysql-data/

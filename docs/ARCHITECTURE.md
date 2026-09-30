@@ -9,7 +9,7 @@
 
 ## 1. Gambaran Arsitektur Tingkat Tinggi
 
-Arsitektur **decoupled**: SPA frontend + REST API backend, dihubungkan via HTTP/JSON. Backend berkomunikasi async antar-modul via **Transactional Outbox → RabbitMQ**.
+Arsitektur **decoupled**: SPA frontend + REST API backend, dihubungkan via HTTP/JSON. Backend menulis **Transactional Outbox** (`outbox_events`) dalam transaksi bisnis; relay ke broker **ditunda ke P1** (lihat `docs/ADR/0002`).
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -23,18 +23,13 @@ Arsitektur **decoupled**: SPA frontend + REST API backend, dihubungkan via HTTP/
 │                                                               │
 │   Router → Controller → Service → Repository → (MySQL)        │
 │                  │                                            │
-│                  ├──► Outbox (same DB tx) ──► Relay Worker    │
-│                  │                                   │        │
-│                  ▼                                   ▼        │
-│            Redis (cache/lock)                  RabbitMQ       │
-│                                                      │        │
-│                                              Consumers        │
-│                                         (Inventory, GL, dsb.) │
+│                  └──► Outbox (same DB tx)                     │
+│                          └── relay ke broker: P1 (ADR-0002)   │
 └──────────────────────────────────────────────────────────────┘
                             │
                             ▼
                     ┌───────────────┐
-                    │  MySQL 8.0.16+│
+                    │  MySQL 8.0.16+│  (lokal via Laragon, tanpa Docker)
                     └───────────────┘
 ```
 
@@ -86,7 +81,6 @@ D:\Coding\ERP\
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── drizzle.config.ts
-│   ├── docker-compose.yml          # MySQL, Redis, RabbitMQ (dev)
 │   ├── .env.example
 │   └── src/
 │       ├── core/                   # Kernel bersama
@@ -100,9 +94,8 @@ D:\Coding\ERP\
 │       │   │   ├── idempotency.middleware.ts
 │       │   │   └── error.middleware.ts
 │       │   ├── audit/audit-log.ts  # Helper tulis audit trail
-│       │   ├── outbox/             # Tulis event ke outbox
-│       │   │   ├── outbox.writer.ts
-│       │   │   └── outbox.relay.ts # Worker polling SKIP LOCKED
+│       │   ├── outbox/             # Tulis event ke outbox (relay ke broker: P1)
+│       │   │   └── outbox-writer.ts
 │       │   └── sequence/doc-number.ts # Penomoran dokumen (row lock)
 │       │
 │       ├── db/
@@ -177,10 +170,10 @@ D:\Coding\ERP\
 - `stock_movements`: append-only juga.
 
 ### 4.3 Transactional Outbox
-- Service menulis event ke `outbox_events` **dalam transaksi yang sama** dengan data bisnis.
-- Relay worker (`outbox.relay.ts`) polling `SELECT ... FOR UPDATE SKIP LOCKED`, publish ke RabbitMQ, set `published_at`.
+- Service menulis event ke `outbox_events` **dalam transaksi yang sama** dengan data bisnis (atomic).
+- **Relay ke broker ditunda ke P1** (ADR-0002). Saat dihidupkan: worker polling `SELECT ... FOR UPDATE SKIP LOCKED` → publish → set `published_at`.
 - Consumer idempotent via `processed_events(event_id UNIQUE)`.
-- **Pelajaran bug-memory:** publisher RabbitMQ pakai **channel singleton** (BUG-20260929-02), bukan per-request.
+- **Pelajaran bug-memory:** saat relay ditambahkan kembali, publisher broker wajib pakai **channel singleton** (BUG-20260929-02), bukan per-request.
 
 ### 4.4 Idempotency
 - Middleware membaca `Idempotency-Key`; simpan di `idempotency_keys` dengan `UNIQUE KEY`.
@@ -248,7 +241,7 @@ Selaras PRD §8.1. Error middleware terpusat → payload seragam:
 | # | Sub-tugas | Output |
 |---|---|---|
 | T1 | Bootstrap backend (package.json, tsconfig, Fastify app, env config) | `backend/` skeleton |
-| T2 | docker-compose (MySQL 8.0, Redis, RabbitMQ) + `.env.example` | infra dev |
+| T2 | Konfigurasi infra dev: `.env.example` + MySQL lokal (Laragon, tanpa Docker — ADR-0002) | infra dev |
 | T3 | Core: errors, response formatter, error middleware | `core/errors`, `core/http` |
 | T4 | Core: DB client (Drizzle + mysql2) + shared schema (audit/outbox/idempotency/sequence) | `core/database`, `db/schema/shared` |
 | T5 | Migrasi awal shared + IAM + org + finance schema | `db/migrations` |
@@ -260,7 +253,7 @@ Selaras PRD §8.1. Error middleware terpusat → payload seragam:
 | T11 | Modul Finance: journal engine (create/post/reverse, validasi balance, append-only) | `modules/finance` |
 | T12 | Modul Finance: reports (trial balance, balance sheet, P&L, GL) | `modules/finance` |
 | T13 | Approval rules (config + submit/approve/reject) | `modules/iam` atau modul `approval` |
-| T14 | Outbox relay worker (SKIP LOCKED + RabbitMQ channel singleton) | `core/outbox/outbox.relay.ts` |
+| T14 | Outbox writer (transactional, same DB tx). Relay ke broker **ditunda ke P1** (ADR-0002) | `core/outbox/outbox-writer.ts` |
 | T15 | Bootstrap frontend (Vite, Tailwind, shadcn, router, providers, api-client) | `frontend/` skeleton |
 | T16 | Frontend: auth (login) + layout shell + dashboard | `frontend/src/features/auth` |
 | T17 | Frontend: IAM/Org settings pages + COA tree + journal pages + reports | `frontend/src/features/*` |
@@ -272,7 +265,7 @@ Selaras PRD §8.1. Error middleware terpusat → payload seragam:
 - **Backend schema:** ~6 file (`db/schema/*`) + migrasi.
 - **Backend modul:** IAM (~8), Org (~5), Finance (~8), Approval (~4).
 - **Frontend:** ~20 file (shell, auth, iam, org, finance, shared).
-- **Infra:** `docker-compose.yml`, `.env.example`, config files.
+- **Infra:** `.env.example`, config files (MySQL lokal via Laragon; tanpa Docker — ADR-0002).
 
 ### 7.3 Pola Arsitektur
 - Decoupled (backend/ + frontend/).
@@ -292,9 +285,6 @@ Selaras PRD §8.1. Error middleware terpusat → payload seragam:
 | `drizzle-orm` + `drizzle-kit` | ORM + migrasi MySQL | SQL mentah — lebih rawan, tanpa type-safety |
 | `mysql2` | Driver MySQL resmi Drizzle | Bun.SQL native (belum terikat resmi ke Drizzle) |
 | `zod` | Validasi DTO | — |
-| `amqplib` | RabbitMQ client | — |
-| `ioredis` | Redis client | — |
-| `argon2` | Hash password | `Bun.password` native (argon2id) — **prefer native** |
 | `pino` | Logging terstruktur | `console` — kurang terstruktur |
 
 **Frontend:**
@@ -308,11 +298,11 @@ Selaras PRD §8.1. Error middleware terpusat → payload seragam:
 | `shadcn/ui` (copy-in) | Komponen |
 | `react-hook-form` + `zod` | Form + validasi |
 
-> **Catatan Dependency Ladder:** `argon2` digantikan `Bun.password` (native) untuk menghindari package tambahan. `pino` dipertimbangkan karena logging terstruktur dibutuhkan untuk observability.
+> **Catatan Dependency Ladder:** `argon2` digantikan `Bun.password` (native). `amqplib`/`ioredis` **dihapus** (tak terpakai; ADR-0002). `pino` dipertimbangkan karena logging terstruktur dibutuhkan untuk observability.
 
 ### 7.5 Strategi Verifikasi
 - **Tier 1:** `bunx tsc --noEmit`, lint, `bun test` (unit: journal balance, idempotency, doc-number).
-- **Tier 2:** jalankan migrasi nyata ke MySQL 8.0 (docker), smoke test (insert company → user → COA → journal → trial balance).
+- **Tier 2:** jalankan migrasi nyata ke MySQL lokal (Laragon), smoke test (insert company → user → COA → journal → trial balance).
 
 ---
 
@@ -336,6 +326,7 @@ DILARANG circular dependency. Antar-modul hanya via `index.ts`.
 - `docs/PRD.md` — kebutuhan & kriteria penerimaan.
 - `docs/RESEARCH.md` — riset & pola kritis.
 - `docs/ADR/0001-mysql-over-postgres.md`.
+- `docs/ADR/0002-tanpa-docker-lokal.md`.
 - Vault: `03-Implementation-and-Clean-Code/*`.
 
 ---
@@ -349,23 +340,23 @@ DILARANG circular dependency. Antar-modul hanya via `index.ts`.
 | Task | Status | Bukti |
 |---|---|---|
 | T1 Bootstrap backend | ✅ | `bunx tsc --noEmit` = 0 |
-| T2 docker-compose infra | ✅ (file) | `docker compose up` **TERTUNDA** (daemon mati) |
+| T2 Infra dev (MySQL lokal, tanpa Docker) | ✅ | ADR-0002; Docker & broker dihapus |
 | T3 Core errors/response/logger | ✅ | test hijau |
 | T4 DB client + shared schema | ✅ | 5 tabel |
 | T5 Schema IAM/Org/Finance + migrasi | ✅ | 20 tabel, migrasi `0000_silky_cammi.sql` ter-generate |
 | T6-T9 IAM (auth/users/company/rbac/audit/outbox/doc-number) | ✅ | tsc 0 |
 | T10-T12 Finance (COA, journal engine, reports) | ✅ | unit test journal + money hijau |
 | T13 Approval rules (engine submit/approve/reject multi-tier) | ✅ | smoke test 2-tier hijau |
-| T14 Outbox relay + RabbitMQ publisher singleton | ✅ | tsc 0 |
+| T14 Outbox writer (transactional). Relay ke broker ditunda ke P1 | ✅ | tsc 0 |
 | T15-T17 Frontend (shell, auth, dashboard, COA/Jurnal/Laporan) | ✅ | `vite build` sukses |
 | T18 Verifikasi Tier 1 | ✅ | typecheck 0, 17 unit test pass, build sukses |
 | T18 Verifikasi Tier 2 (migrasi + smoke DB nyata) | ✅ | MySQL 8.4.3; 21 tabel; DB smoke + API smoke hijau |
 
 ### Blocker Terbuka
-- **Tidak ada.** Redis/RabbitMQ (docker-compose) belum dijalankan, tetapi tidak dibutuhkan untuk Tier 2; relay outbox baru aktif saat broker tersedia.
+- **Tidak ada.** Redis/RabbitMQ & Docker tidak dipakai di P0 (ADR-0002); relay outbox dihidupkan kembali di P1 saat dibutuhkan.
 
 ### Catatan Environment
-- **MySQL lokal via Laragon 8.4.3** di `127.0.0.1:3306` (root tanpa password), database `erp`. `docker-compose.yml` menyediakan MySQL/Redis/RabbitMQ untuk deployment; JANGAN menjalankan service MySQL compose saat Laragon memakai port 3306 (bentrok).
+- **MySQL lokal via Laragon 8.4.3** di `127.0.0.1:3306` (root tanpa password), database `erp`. **Tanpa Docker** — lihat `docs/ADR/0002-tanpa-docker-lokal.md`.
 - Seed: `bun run db:seed` → company `DEMO`, admin `admin@erp.local` / `admin12345`, 10 akun COA.
 
 ### Bug terarsip (Harvester Gate)

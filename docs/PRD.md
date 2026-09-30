@@ -312,10 +312,11 @@ Organisasi retail/distribusi enterprise menjalankan operasional lintas divisi (g
   - GIVEN GRN diposting (transaksi DB sukses)
   - WHEN transaksi commit
   - THEN 1 baris `outbox_events` (`GoodsReceived`) ikut ter-commit; jika transaksi rollback, event TIDAK ada.
-- **6.3.2**
+- **6.3.2** *(P1 — relay ke broker)*
   - GIVEN `outbox_events` punya 10 baris belum terpublish
   - WHEN relay worker berjalan (multi-instance)
   - THEN tiap event diproses tepat satu kali (via `FOR UPDATE SKIP LOCKED`) dan ditandai `published_at`.
+  - **Catatan:** Di P0 hanya jalur tulis outbox yang aktif (transactional, same DB tx). Relay & broker dihidupkan kembali di P1 (`docs/ADR/0002-tanpa-docker-lokal.md`).
 
 ---
 
@@ -325,9 +326,9 @@ Organisasi retail/distribusi enterprise menjalankan operasional lintas divisi (g
 
 - **Backend:** Bun 1.4.2 + Fastify + TypeScript (strict) + Drizzle ORM (`mysql2`) + Zod.
 - **Database:** MySQL **8.0.16+** (wajib). Lihat `docs/ADR/0001-mysql-over-postgres.md`.
-- **Broker:** RabbitMQ (amqplib). **Cache:** Redis.
+- **Broker/Cache:** RabbitMQ/Redis **tidak dipakai di P0** — relay outbox ke broker ditunda ke P1 (`docs/ADR/0002-tanpa-docker-lokal.md`).
 - **Frontend:** React + Vite + TypeScript + Tailwind + shadcn/ui + TanStack Query/Table.
-- **Infra:** docker-compose (MySQL, Redis, RabbitMQ).
+- **Infra:** MySQL lokal (Laragon). **Tanpa Docker** (`docs/ADR/0002-tanpa-docker-lokal.md`).
 
 ### 5.2 Integritas Transaksi
 
@@ -381,26 +382,28 @@ Fitur dinyatakan selesai bila:
 
 ### 7.1 Design Token
 
-**Palet warna (netral enterprise, aksen tegas):**
+**Palet warna ("Ink & Ledger" — konsol keuangan retail/distribusi, sengaja menghindari biru SaaS generik):**
 | Token | Nilai | Pemakaian |
 |---|---|---|
-| `--color-primary` | `#1E3A8A` (indigo-900) | Header, tombol utama, brand |
-| `--color-primary-fg` | `#FFFFFF` | Teks di atas primary |
-| `--color-accent` | `#0EA5E9` (sky-500) | Link, highlight |
-| `--color-success` | `#16A34A` (green-600) | Status APPROVED/POSTED |
-| `--color-warning` | `#D97706` (amber-600) | PENDING, MATCH_EXCEPTION |
-| `--color-danger` | `#DC2626` (red-600) | REJECTED, void, error |
-| `--color-surface` | `#FFFFFF` | Kartu, tabel |
-| `--color-bg` | `#F8FAFC` (slate-50) | Latar halaman |
-| `--color-border` | `#E2E8F0` (slate-200) | Border |
-| `--color-text` | `#0F172A` (slate-900) | Teks utama |
-| `--color-muted` | `#64748B` (slate-500) | Teks sekunder |
+| `--color-ink` | `#0B1220` | Sidebar, panel gelap (chrome) |
+| `--color-ink-soft` | `#1A2336` | Elevasi di atas ink |
+| `--color-canvas` | `#EEF1F5` | Latar halaman (dingin, bukan cream) |
+| `--color-surface` | `#FFFFFF` | Panel, tabel |
+| `--color-border` | `#D6DDE6` | Garis rambut pemisah |
+| `--color-text` | `#101826` | Teks utama |
+| `--color-muted` | `#5B6675` | Teks sekunder |
+| `--color-accent` | `#0F766E` (teal-700) | Aksen tanda tangan: tombol utama, angka uang |
+| `--color-success` | `#15803D` | Status APPROVED/POSTED |
+| `--color-warning` | `#B45309` | PENDING, MATCH_EXCEPTION |
+| `--color-danger` | `#B91C1C` | REJECTED, void, error |
 
-**Tipografi:** Inter (UI), monospace `JetBrains Mono` untuk angka/kode.
+**Tipografi:** `Inter Tight` (UI), monospace `JetBrains Mono` untuk angka/kode.
 - Skala: `--text-xs 12px`, `--text-sm 14px`, `--text-base 16px`, `--text-lg 18px`, `--text-xl 24px`, `--text-2xl 30px`.
-- Angka uang pakai `font-variant-numeric: tabular-nums`.
+- Angka uang pakai `font-variant-numeric: tabular-nums` (kelas `.tabular`).
 
-**Spacing:** basis 4px (`4/8/12/16/24/32/48`). Radius: `--radius 8px`, `--radius-lg 12px`. Shadow: `sm` untuk kartu, `md` untuk dropdown/modal.
+**Spacing:** basis 4px (`4/8/12/16/24/32/48`). Radius: `--radius-base 6px`, `--radius-lg 10px`. Garis rambut (`border`) menggantikan shadow lembut — hindari "kartu SaaS" seragam.
+
+**Aksesibilitas:** focus ring teal jelas (`:focus-visible`), kontras WCAG AA, hormati `prefers-reduced-motion`.
 
 ### 7.2 Daftar Halaman & Rute
 
@@ -615,7 +618,7 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 | Method | Path | Deskripsi |
 |---|---|---|
 | GET | `/audit/logs` | Audit trail (filter) |
-| GET | `/health` | Health check (MySQL/Redis/RabbitMQ) |
+| GET | `/health` | Health check (MySQL) |
 
 ### 8.3 Contoh Kontrak (kunci)
 

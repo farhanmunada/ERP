@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 
+import { PageHeader } from '../../shared/components/PageHeader.tsx';
 import { createJournal, listAccounts } from './finance.api.ts';
 import type { JournalLinePayload } from './finance.api.ts';
 
@@ -53,62 +54,92 @@ export function JournalPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Jurnal Umum</h1>
+      <PageHeader
+        title="Jurnal Umum"
+        description="Catat jurnal berpasangan. Debit dan kredit harus seimbang sebelum diposting."
+      />
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-[var(--radius-lg)] border border-border bg-surface p-4 shadow-sm">
-        <div className="flex flex-wrap gap-3">
-          <label className="flex flex-col text-sm text-muted">
+      <form onSubmit={handleSubmit} className="panel flex flex-col">
+        <div className="flex flex-wrap gap-4 border-b border-border p-4">
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             Tanggal
-            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="mt-1 rounded-[var(--radius-base)] border border-border px-3 py-2 text-text" />
+            <input
+              type="date"
+              value={entryDate}
+              onChange={(e) => setEntryDate(e.target.value)}
+              className="field font-mono"
+            />
           </label>
-          <label className="flex flex-1 flex-col text-sm text-muted">
+          <label className="flex min-w-[240px] flex-1 flex-col gap-1.5 text-sm font-medium">
             Deskripsi
-            <input value={description} onChange={(e) => setDescription(e.target.value)} required className="mt-1 rounded-[var(--radius-base)] border border-border px-3 py-2 text-text" />
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+              className="field"
+              placeholder="Mis. Penjualan tunai harian"
+            />
           </label>
         </div>
 
-        <table className="w-full text-sm">
-          <thead className="text-left text-muted">
-            <tr>
-              <th className="py-2">Akun</th>
-              <th className="py-2">Debit</th>
-              <th className="py-2">Kredit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line, index) => (
-              <tr key={index}>
-                <td className="py-1 pr-2">
-                  <select value={line.accountId} onChange={(e) => updateLine(index, { accountId: e.target.value })} className="w-full rounded-[var(--radius-base)] border border-border px-2 py-1 text-text">
-                    <option value="">— pilih akun —</option>
-                    {(accounts ?? []).map((account) => (
-                      <option key={account.id} value={account.id}>{account.code} · {account.name}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="py-1 pr-2">
-                  <input value={line.debit} onChange={(e) => updateLine(index, { debit: e.target.value })} className="tabular w-full rounded-[var(--radius-base)] border border-border px-2 py-1 text-right text-text" />
-                </td>
-                <td className="py-1">
-                  <input value={line.credit} onChange={(e) => updateLine(index, { credit: e.target.value })} className="tabular w-full rounded-[var(--radius-base)] border border-border px-2 py-1 text-right text-text" />
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="table-head">
+              <tr>
+                <th className="px-4 py-3">AKUN</th>
+                <th className="w-40 px-4 py-3 text-right">DEBIT</th>
+                <th className="w-40 px-4 py-3 text-right">KREDIT</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="border-t border-border font-semibold">
-              <td className="py-2 text-right text-muted">Total</td>
-              <td className="tabular py-2 text-right">{totalDebit.toFixed(2)}</td>
-              <td className="tabular py-2 text-right">{totalCredit.toFixed(2)}</td>
-            </tr>
-          </tfoot>
-        </table>
+            </thead>
+            <tbody>
+              {lines.map((line, index) => (
+                <tr key={index} className="border-b border-border last:border-0">
+                  <td className="px-4 py-2">
+                    <select
+                      value={line.accountId}
+                      onChange={(e) => updateLine(index, { accountId: e.target.value })}
+                      className="field w-full"
+                    >
+                      <option value="">— pilih akun —</option>
+                      {(accounts ?? []).map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.code} · {account.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-2">
+                    <input
+                      value={line.debit}
+                      onChange={(e) => updateLine(index, { debit: e.target.value })}
+                      className="field-mono w-full"
+                    />
+                  </td>
+                  <td className="px-4 py-2">
+                    <input
+                      value={line.credit}
+                      onChange={(e) => updateLine(index, { credit: e.target.value })}
+                      className="field-mono w-full"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-border-strong font-semibold">
+                <td className="px-4 py-3 text-right text-muted">Total</td>
+                <td className="tabular px-4 py-3 text-right font-mono">{totalDebit.toFixed(2)}</td>
+                <td className="tabular px-4 py-3 text-right font-mono">{totalCredit.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
 
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setLines((c) => [...c, { ...EMPTY_LINE }])} className="rounded-[var(--radius-base)] border border-border px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center gap-3 border-t border-border p-4">
+          <button type="button" onClick={() => setLines((c) => [...c, { ...EMPTY_LINE }])} className="btn-ghost">
             + Baris
           </button>
-          <button type="submit" disabled={!balanced || mutation.isPending} className="rounded-[var(--radius-base)] bg-primary px-4 py-2 text-primary-fg disabled:opacity-60">
+          <button type="submit" disabled={!balanced || mutation.isPending} className="btn-primary">
             {mutation.isPending ? 'Memposting…' : 'Posting Jurnal'}
           </button>
           {!balanced ? <span className="text-sm text-warning">Debit dan kredit harus seimbang.</span> : null}
