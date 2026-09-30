@@ -18,6 +18,13 @@ export const PERMISSIONS = [
   { code: 'bill:post', description: 'Posting vendor bill' },
   { code: 'so:create', description: 'Membuat sales order' },
   { code: 'so:approve', description: 'Menyetujui sales order' },
+  { code: 'customer:manage', description: 'Mengelola master customer' },
+  { code: 'quotation:create', description: 'Membuat quotation' },
+  { code: 'so:confirm', description: 'Konfirmasi sales order (credit check + reserve)' },
+  { code: 'do:create', description: 'Membuat delivery order' },
+  { code: 'invoice:create', description: 'Membuat customer invoice' },
+  { code: 'invoice:void', description: 'Void customer invoice' },
+  { code: 'invoice:credit-note', description: 'Membuat credit note (retur penjualan)' },
 ] as const;
 
 // Standard retail COA. Debit-normal unless noted (LIABILITY/EQUITY/REVENUE are credit-normal).
@@ -78,3 +85,9 @@ export const DEFAULT_APPROVAL_RULES = [
 
 // Default 3-way matching tolerance (percent) — PRD §7.3.
 export const DEFAULT_TOLERANCE_PCT = { qty: '2.00', price: '2.00' } as const;
+
+// Sample customers for sales smoke/manual testing. Toko B mirrors the PRD credit-limit example.
+export const DEFAULT_CUSTOMERS = [
+  { code: 'CUST-001', name: 'Toko Berkah Jaya', email: 'order@berkahjaya.id', phone: '021-5550301', npwp: '03.456.789.0-123.000', creditLimit: '50000000.00', paymentTermDays: 30 },
+  { code: 'CUST-002', name: 'Toko B', email: 'purchasing@tokob.id', phone: '021-5550302', npwp: '04.567.890.1-234.000', creditLimit: '5000000.00', paymentTermDays: 14 },
+] as const;

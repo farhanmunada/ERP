@@ -8,6 +8,7 @@ import {
   approvalRules,
   branches,
   companies,
+  customers,
   items,
   permissions,
   procurementSettings,
@@ -26,6 +27,7 @@ import {
   DEFAULT_BRANCH_ID,
   DEFAULT_COA,
   DEFAULT_COMPANY_ID,
+  DEFAULT_CUSTOMERS,
   DEFAULT_ITEMS,
   DEFAULT_TOLERANCE_PCT,
   DEFAULT_VENDORS,
@@ -162,6 +164,24 @@ async function seed(): Promise<void> {
         paymentTermDays: vendor.paymentTermDays,
       })
       .onDuplicateKeyUpdate({ set: { name: vendor.name } });
+  }
+
+  console.log('[seed] Master customers...');
+  for (const customer of DEFAULT_CUSTOMERS) {
+    await db
+      .insert(customers)
+      .values({
+        id: randomUUID(),
+        companyId: DEFAULT_COMPANY_ID,
+        code: customer.code,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        npwp: customer.npwp,
+        creditLimit: customer.creditLimit,
+        paymentTermDays: customer.paymentTermDays,
+      })
+      .onDuplicateKeyUpdate({ set: { name: customer.name, creditLimit: customer.creditLimit } });
   }
 
   console.log('[seed] Approval rules + procurement settings...');

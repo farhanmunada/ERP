@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — ERP Modular (Retail/Distribusi)
 
-> Status: **APPROVED ✅ (Gerbang 2 lulus) — Slice P0a SELESAI; Slice P0b (Inventory) SELESAI; Slice P0c (Procurement) SELESAI diimplementasi (kode di `backend/` & `frontend/`)**
+> Status: **APPROVED ✅ (Gerbang 2 lulus) — Slice P0a SELESAI; Slice P0b (Inventory) SELESAI; Slice P0c (Procurement) SELESAI; Slice P0d (Sales/O2C) SELESAI diimplementasi (kode di `backend/` & `frontend/`)**
 > Bahasa: Indonesia (istilah teknis/identifier tetap English).
 > Basis: `docs/PRD.md` (APPROVED), `docs/RESEARCH.md`, `docs/ADR/`.
 > Versi: 1.0.0 · Fase: 4 (Task Decomposition & Architecture Planning)
@@ -511,3 +511,130 @@ Route → Controller → Service → Repository; pure logic (`matching.ts`, `cos
 1. **Pemecahan slice:** eksekusi **P0c utuh** (PR→PO→GRN→Bill + 3-way matching) dalam satu slice. ✅ Disetujui.
 2. **Toleransi default:** **2% qty / 2% harga** (dapat diubah per company via `procurement_settings`). ✅ Disetujui.
 3. **PPN pada Vendor Bill:** field pajak **opsional** (default 0) yang memposting Debit `2120 PPN Masukan`. ✅ Disetujui.
+
+---
+
+## 13. Status Implementasi Slice P0d — Sales & Distribution (Order-to-Cash) (Per 2026-09-30)
+
+> **Gerbang 2:** ✅ DISETUJUI 2026-09-30. Rencana & implementasi tuntas.
+
+### 13.0 Status Verifikasi (Tier 1 & 2)
+
+| Item | Hasil |
+|---|---|
+| `tsc --noEmit` (backend) | 0 error |
+| Unit test backend | 36 pass / 0 fail (+6 baru: `credit.spec.ts`) |
+| DB smoke Tier 2 | LULUS (28 langkah; +7 langkah O2C) |
+| API smoke | LULUS (idempotency DO & Invoice, replay, void) |
+| `tsc --noEmit` (frontend) | 0 error |
+| `vite build` | OK (110 modul) |
+| Migrasi | `0004_clammy_runaways.sql` (50 tabel total) |
+| Bug | Tidak ada bug baru ditemukan pada slice ini |
+
+### 13.1 Ruang Lingkup
+
+Alur O2C: **Quotation → Sales Order (credit check + soft reserve) → Delivery Order (stock out) → Customer Invoice (AR + revenue + COGS)** + void/credit note. Mengacu PRD Modul 4 (Story 4.1–4.3), PRD §8.2, §5.3.1–5.3.2.
+
+- Master **Customer** (kode, nama, kontak, NPWP, **credit limit**, termin).
+- **Quotation** ringan (DRAFT → ACCEPTED → CONVERTED) + konversi ke SO.
+- **Sales Order** + **credit check** saat confirm + **soft reserve** stok per (item, warehouse).
+- **Delivery Order** (idempotent): melepas reserve lalu **stock out** (COGS dari costing engine) — atomic.
+- **Customer Invoice** (idempotent): jurnal **Debit AR 1200** / **Credit Sales 4100** (+ **Credit PPN Keluaran 2110** opsional) dan **Debit COGS 5100** / **Credit Inventory 1300** secara atomic.
+- **Void invoice** → reversal journal (`reverseJournal`, `reversal_of_id`). **Credit note** (retur parsial) → jurnal balik proporsional.
+
+### 13.2 Keputusan Kunci
+
+1. **Customer master** di modul `sales` (endpoint `/customers`, halaman `/master/customers`), menyimpan `credit_limit`. Tidak ada akun COA baru (semua akun Sales sudah ada di `DEFAULT_COA`: `1200`, `2110`, `4100`, `5100`, `1300`).
+2. **Credit check** saat `POST /sales/orders/:id/confirm`: `outstanding AR` = Σ `total` invoice berstatus `POSTED` (belum di-void) − Σ credit note. Jika `outstanding + SO.total > credit_limit` → **422 "Melebihi credit limit customer"** (PRD 4.1.2). Outstanding dihitung dari tabel dokumen (bukan saldo GL) agar deterministik di P0; rekonsiliasi GL di P1.
+3. **Soft reserve** saat SO `CONFIRMED`: `warehouse_stock.reserved += qty` (tanpa mengubah `on_hand`/`avg_cost`). Validasi `available = on_hand − reserved ≥ qty` → jika gagal **422 "Stok tidak cukup"** (PRD 4.2.1). Baris stok dikunci berurutan (pola `lockStockRowsOrdered`).
+4. **Delivery Order** (idempotent via `withIdempotency`): untuk tiap baris → **release reserve** (`reserved -= qty`) lalu `stockOutTx` (COGS nyata dari MA/FIFO). Efek akhir: `on_hand −= qty`, `reserved` kembali 0 (PRD 4.2.2). `delivered_qty` pada SO line bertambah; status SO → `PARTIALLY_DELIVERED`/`DELIVERED`.
+5. **Inventory helper baru** (modul `inventory`):
+   - Ekstrak `stockOutTx(tx, input)` dari `stockOut` (pola sama seperti `stockInTx`); `stockOut(input)` jadi pembungkus `runInTransaction`.
+   - `reserveStockTx(tx, {companyId,itemId,warehouseId,qty})` dan `releaseStockTx(tx, {companyId,itemId,warehouseId,qty})` — memvalidasi ketersediaan, menulis `warehouse_stock.reserved`. Diekspor dari `inventory/index.ts`.
+6. **Customer Invoice** (idempotent): dibuat dari DO (qty terkirim). Satu **journal entry** berisi 5 baris: Debit `1200` AR (total) · Credit `4100` Sales (subtotal) · Credit `2110` PPN Keluaran (pajak, jika > 0) · Debit `5100` COGS · Credit `1300` Inventory (COGS). Balanced. `sourceType = SALES`.
+   - **PPN opsional** (default 0) — konsisten dengan keputusan P0c.
+   - COGS diambil dari `total_cost` movement stock-out DO yang direferensikan.
+7. **Void invoice** → `reverseJournal` (buat jurnal reversal, jurnal asal tidak diubah) + status `VOID` (PRD 5.3.1). **Credit note** (retur parsial) → jurnal balik proporsional: Debit `4100` Sales + Credit `1200` AR (nilai jual) dan Debit `1300` Inventory + Credit `5100` COGS (nilai HPP) (PRD 5.3.2). **Stok tidak dikembalikan fisik di P0** (limitation, lihat 13.9).
+8. **Status dokumen:**
+   - Quotation: `DRAFT → ACCEPTED → CONVERTED`.
+   - Sales Order: `DRAFT → CONFIRMED → PARTIALLY_DELIVERED → DELIVERED → INVOICED → CLOSED`; `CANCELLED` (melepas reserve).
+   - Delivery Order: `POSTED` (dibuat = posted, idempotent).
+   - Customer Invoice: `POSTED → VOID`.
+9. **Idempotency:** DO dan Invoice memakai `withIdempotency` (replay dicek **sebelum** side-effect — pola BUG-10). SO confirm/cancel & quotation convert memakai lock baris (`SELECT ... FOR UPDATE`) untuk cegah dobel.
+10. **Nomor dokumen** via `nextDocNumber` (row lock): prefix `QT`, `SO`, `DO`, `INV`, `CN`.
+11. **Permission baru:** `customer:manage`, `quotation:create`, `so:create`, `so:confirm`, `do:create`, `invoice:create`, `invoice:void`, `invoice:credit-note`.
+
+### 13.3 Skema Database Baru (11 tabel) — `db/schema/sales.schema.ts`
+
+| Tabel | Kolom inti | Constraint |
+|---|---|---|
+| `customers` | id, company_id, code, name, email, phone, address, npwp, credit_limit, payment_term_days, is_active | unique(company_id, code) |
+| `quotations` | id, company_id, doc_number, quote_date, customer_id, status, subtotal, tax, total, valid_until, created_by | unique(company_id, doc_number) |
+| `quotation_lines` | id, quotation_id, item_id, qty, unit_price, discount, subtotal | index(quotation_id) |
+| `sales_orders` | id, company_id, doc_number, so_date, customer_id, warehouse_id, status, quotation_id, subtotal, tax, total, created_by | unique(company_id, doc_number), index(company_id, customer_id) |
+| `sales_order_lines` | id, so_id, item_id, qty, unit_price, discount, subtotal, delivered_qty, invoiced_qty | index(so_id) |
+| `delivery_orders` | id, company_id, doc_number, do_date, so_id, warehouse_id, status, created_by | unique(company_id, doc_number) |
+| `delivery_order_lines` | id, do_id, so_line_id, item_id, qty_delivered, unit_cost, batch_no | index(do_id) |
+| `customer_invoices` | id, company_id, doc_number, invoice_date, customer_id, do_id, status, subtotal, tax, total, cogs, journal_entry_id, created_by | unique(company_id, doc_number) |
+| `customer_invoice_lines` | id, invoice_id, so_line_id, item_id, qty, unit_price, amount, unit_cost, cogs_amount | index(invoice_id) |
+| `credit_notes` | id, company_id, doc_number, cn_date, customer_id, invoice_id, subtotal, tax, total, cogs, journal_entry_id, created_by | unique(company_id, doc_number) |
+| `credit_note_lines` | id, cn_id, invoice_line_id, item_id, qty, unit_price, amount, unit_cost, cogs_amount | index(cn_id) |
+
+> Prefiks nomor dokumen: `QT`, `SO`, `DO`, `INV`, `CN`. Tidak ada tabel append-only baru (dokumen punya status yang boleh berubah); ledger stok tetap `stock_movements` (append-only).
+
+### 13.4 Endpoint REST (`/api/v1`)
+
+| Method | Path | Permission | Catatan |
+|---|---|---|---|
+| POST/GET | `/customers` | `customer:manage` / auth | Master customer (termasuk credit limit) |
+| GET | `/customers/:id/credit` | auth | Ringkasan limit/outstanding/available |
+| POST/GET | `/sales/quotations` | `quotation:create` / auth | Buat & list quotation |
+| POST | `/sales/quotations/:id/accept` | `quotation:create` | Quotation → ACCEPTED |
+| POST | `/sales/quotations/:id/convert-to-so` | `so:create` | Quotation → SO (CONVERTED) |
+| POST/GET | `/sales/orders` | `so:create` / auth | Buat & list SO |
+| GET | `/sales/orders/:id` | auth | Detail + lines + sisa kirim |
+| POST | `/sales/orders/:id/confirm` | `so:confirm` | Credit check + soft reserve |
+| POST | `/sales/orders/:id/cancel` | `so:create` | Cancel + lepas reserve |
+| POST/GET | `/sales/deliveries` | `do:create` / auth | **Idempotent** (withIdempotency) |
+| POST/GET | `/sales/invoices` | `invoice:create` / auth | **Idempotent**; posting jurnal AR+revenue+COGS |
+| GET | `/sales/invoices/:id` | auth | Detail + lines |
+| POST | `/sales/invoices/:id/void` | `invoice:void` | Reversal journal |
+| POST | `/sales/invoices/:id/credit-note` | `invoice:credit-note` | Retur parsial (jurnal balik) |
+
+### 13.5 Berkas Backend
+
+**Baru — `backend/src/modules/sales/`:**
+`sales.types.ts` · `sales.schema.ts` (Zod) · `sales.repository.ts` · `credit.ts` (pure, cek kredit) · `credit.spec.ts` (unit) · `amounts.ts` · `customer.service.ts` · `quotation.service.ts` · `so.service.ts` · `do.service.ts` · `invoice.service.ts` · `credit-note.service.ts` · `sales.controller.ts` · `sales.routes.ts` · `index.ts`
+
+**Diubah:**
+- `db/schema/sales.schema.ts` (baru) + `db/schema/index.ts` (export).
+- `modules/inventory/stock.service.ts` (ekstrak `stockOutTx`) + `modules/inventory/reservation.service.ts` (baru: reserve/release) + `modules/inventory/index.ts` (export).
+- `db/seed-data.ts` (+permission baru, +customer sample) + `db/seed.ts`.
+- `app.ts` (register `salesRoutes`).
+- `db/smoke-test.ts` & `db/api-smoke.ts` (skenario O2C end-to-end).
+- Migrasi baru `0004_*.sql` (generate drizzle-kit; **review SQL manual** sebelum `db:migrate` — lihat BUG-11 & BUG-12).
+
+**Permission baru:** `customer:manage`, `quotation:create`, `so:create`, `so:confirm`, `do:create`, `invoice:create`, `invoice:void`, `invoice:credit-note`.
+
+### 13.6 Berkas Frontend
+
+**Baru — `frontend/src/features/sales/`:**
+`sales.api.ts` · `CustomersPage.tsx` · `QuotationsPage.tsx` · `OrdersPage.tsx` · `DeliveriesPage.tsx` · `InvoicesPage.tsx` · `index.ts`
+
+**Diubah:** `app/router.tsx` (5 rute) · `app/AppShell.tsx` (section nav "Penjualan" + badge `P0d`) · `shared/components/icons.tsx` (ikon baru: customer, quotation, delivery, invoice).
+
+Rute: `/master/customers` · `/sales/quotations` · `/sales/orders` · `/sales/deliveries` · `/sales/invoices`.
+
+### 13.7 Pola Arsitektur
+Route → Controller → Service → Repository; pure logic (`credit.ts`, `amounts.ts`) dipisah untuk unit test; mutasi dalam `runInTransaction`; audit log + outbox ditulis dalam transaksi yang sama; idempotency via `withIdempotency` (DO & Invoice); nomor dokumen via `nextDocNumber` (row lock); reserve/release lewat helper inventory transaksional.
+
+### 13.8 Verifikasi (Tier 1 & 2)
+- **Tier 1:** `tsc --noEmit` = 0; unit test baru (`credit.spec.ts` — limit terlampaui/lolos; `amounts.spec.ts` — subtotal+PPN=total) + regresi 30 test lama; `vite build` OK.
+- **Tier 2:** migrasi nyata ke MySQL Laragon; DB smoke O2C: Quotation 200 @ 15.000 → SO → confirm (credit check lolos) → soft reserve (reserved 200, available turun) → DO 200 (on_hand −200, reserved 0) → Invoice (jurnal AR/Sales/COGS/Inventory, TB seimbang) → void (reversal) → credit note parsial. Skenario gagal: confirm melebihi credit limit → 422. API smoke: idempotency replay DO & Invoice, 400 tanpa key, 403 tanpa permission.
+- Frontend: build + smoke manual.
+
+### 13.9 Keputusan Operator (Gerbang 2 — DISETUJUI 2026-09-30)
+1. **Pemecahan slice:** eksekusi **P0d utuh** (Quotation→SO→DO→Invoice + credit + reserve + void/credit note, 11 tabel) dalam satu slice. ✅ Disetujui.
+2. **PPN penjualan:** field pajak **opsional** (default 0) yang memposting Credit `2110 PPN Keluaran`. ✅ Disetujui.
+3. **Credit note & stok:** credit note **hanya** memposting jurnal balik (revenue+AR & COGS+Inventory) **tanpa** mengembalikan stok fisik (limitation; retur stok fisik → P1). ✅ Disetujui.
+4. **Sumber "outstanding AR":** dihitung dari **tabel dokumen** (Σ invoice POSTED − credit note) untuk determinisme P0. ✅ Disetujui.

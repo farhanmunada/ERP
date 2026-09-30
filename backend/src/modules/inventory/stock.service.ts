@@ -212,6 +212,11 @@ async function fifoOutbound(
 }
 
 export async function stockOut(input: StockOutInput): Promise<MovementResult> {
+  return runInTransaction((tx) => stockOutTx(tx, input));
+}
+
+// Transactional variant: runs inside the caller's tx so a Delivery Order stays atomic with its journal.
+export async function stockOutTx(tx: Tx, input: StockOutInput): Promise<MovementResult> {
   const item = await requireItem(input.companyId, input.itemId);
   if (item.trackSerial) {
     assertTracking(item, { quantity: input.quantity, serialNumbers: input.serialNumbers });
@@ -220,71 +225,69 @@ export async function stockOut(input: StockOutInput): Promise<MovementResult> {
   const method = item.costingMethod as CostingMethod;
   const outQtyUnits = toQtyUnits(input.quantity);
 
-  return runInTransaction(async (tx) => {
-    const row: StockRow = await ensureStockRow(tx, input.companyId, input.itemId, input.warehouseId);
-    const available = toQtyUnits(row.onHand) - toQtyUnits(row.reserved);
-    if (available < outQtyUnits) throw new UnprocessableError('Stok tidak cukup');
+  const row: StockRow = await ensureStockRow(tx, input.companyId, input.itemId, input.warehouseId);
+  const available = toQtyUnits(row.onHand) - toQtyUnits(row.reserved);
+  if (available < outQtyUnits) throw new UnprocessableError('Stok tidak cukup');
 
-    let outValueCents: bigint;
-    let state: StockState;
-    if (method === 'FIFO') {
-      const result = await fifoOutbound(tx, input.itemId, input.warehouseId, outQtyUnits);
-      outValueCents = result.outValueCents;
-      const qtyUnits = toQtyUnits(row.onHand) - outQtyUnits;
-      state = { qtyUnits, valueCents: result.valueCents, avgCostCents: averageCostCents(result.valueCents, qtyUnits) };
-    } else {
-      const prev = currentState(method, row, []);
-      const result = movingAverageOutbound(prev, outQtyUnits);
-      outValueCents = result.outValueCents;
-      state = result.state;
+  let outValueCents: bigint;
+  let state: StockState;
+  if (method === 'FIFO') {
+    const result = await fifoOutbound(tx, input.itemId, input.warehouseId, outQtyUnits);
+    outValueCents = result.outValueCents;
+    const qtyUnits = toQtyUnits(row.onHand) - outQtyUnits;
+    state = { qtyUnits, valueCents: result.valueCents, avgCostCents: averageCostCents(result.valueCents, qtyUnits) };
+  } else {
+    const prev = currentState(method, row, []);
+    const result = movingAverageOutbound(prev, outQtyUnits);
+    outValueCents = result.outValueCents;
+    state = result.state;
+  }
+
+  if (item.trackSerial && input.serialNumbers) {
+    const serials = await repo.lockSerials(tx, input.companyId, input.itemId, input.serialNumbers);
+    const usable = serials.filter((serial) => serial.status === 'IN_STOCK' && serial.warehouseId === input.warehouseId);
+    if (usable.length !== input.serialNumbers.length) {
+      throw new UnprocessableError('Serial number tidak tersedia di gudang ini');
     }
+    await repo.markSerialsIssued(tx, usable.map((serial) => serial.id));
+  }
 
-    if (item.trackSerial && input.serialNumbers) {
-      const serials = await repo.lockSerials(tx, input.companyId, input.itemId, input.serialNumbers);
-      const usable = serials.filter((serial) => serial.status === 'IN_STOCK' && serial.warehouseId === input.warehouseId);
-      if (usable.length !== input.serialNumbers.length) {
-        throw new UnprocessableError('Serial number tidak tersedia di gudang ini');
-      }
-      await repo.markSerialsIssued(tx, usable.map((serial) => serial.id));
-    }
-
-    const unitCostCents = averageCostCents(outValueCents, outQtyUnits);
-    const movementId = await persistMovement(tx, {
-      companyId: input.companyId,
-      itemId: input.itemId,
-      warehouseId: input.warehouseId,
-      movementType: MOVEMENT_TYPES.STOCK_OUT,
-      quantityUnits: outQtyUnits,
-      unitCostCents,
-      totalCostCents: outValueCents,
-      state,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      userId: input.userId,
-    });
-
-    await writeOutboxEvent(tx, {
-      eventType: OUTBOX_EVENT_TYPES.STOCK_OUT,
-      aggregateType: 'item',
-      aggregateId: input.itemId,
-      payload: { movementId, warehouseId: input.warehouseId, quantity: input.quantity },
-    });
-    await writeAuditLog(tx, {
-      companyId: input.companyId,
-      userId: input.userId,
-      action: 'STOCK_OUT',
-      entityType: 'stock_movement',
-      entityId: movementId,
-      stateAfter: { itemId: input.itemId, quantity: input.quantity, onHand: serializeState(state).onHand },
-    });
-
-    return {
-      movementId,
-      onHand: serializeState(state).onHand,
-      unitCost: fromMinorUnits(unitCostCents),
-      totalCost: fromMinorUnits(outValueCents),
-    };
+  const unitCostCents = averageCostCents(outValueCents, outQtyUnits);
+  const movementId = await persistMovement(tx, {
+    companyId: input.companyId,
+    itemId: input.itemId,
+    warehouseId: input.warehouseId,
+    movementType: MOVEMENT_TYPES.STOCK_OUT,
+    quantityUnits: outQtyUnits,
+    unitCostCents,
+    totalCostCents: outValueCents,
+    state,
+    referenceType: input.referenceType,
+    referenceId: input.referenceId,
+    userId: input.userId,
   });
+
+  await writeOutboxEvent(tx, {
+    eventType: OUTBOX_EVENT_TYPES.STOCK_OUT,
+    aggregateType: 'item',
+    aggregateId: input.itemId,
+    payload: { movementId, warehouseId: input.warehouseId, quantity: input.quantity },
+  });
+  await writeAuditLog(tx, {
+    companyId: input.companyId,
+    userId: input.userId,
+    action: 'STOCK_OUT',
+    entityType: 'stock_movement',
+    entityId: movementId,
+    stateAfter: { itemId: input.itemId, quantity: input.quantity, onHand: serializeState(state).onHand },
+  });
+
+  return {
+    movementId,
+    onHand: serializeState(state).onHand,
+    unitCost: fromMinorUnits(unitCostCents),
+    totalCost: fromMinorUnits(outValueCents),
+  };
 }
 
 export async function listStock(

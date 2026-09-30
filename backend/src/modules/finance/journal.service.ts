@@ -64,6 +64,11 @@ export async function postJournal(input: JournalInput, createdBy: string): Promi
 
 // Reversal: create a new posted entry that swaps debit/credit, linked to the original.
 export async function reverseJournal(companyId: string, entryId: string, createdBy: string): Promise<CreateJournalResult> {
+  return db.transaction((tx) => reverseJournalTx(tx, companyId, entryId, createdBy));
+}
+
+// Transactional variant so callers (e.g. invoice void) stay atomic with their own writes.
+export async function reverseJournalTx(tx: Tx, companyId: string, entryId: string, createdBy: string): Promise<CreateJournalResult> {
   const original = await repo.findJournalEntry(companyId, entryId);
   if (!original) throw new NotFoundError('Journal Entry', entryId);
   if (original.status !== JOURNAL_STATUS.POSTED) throw new UnprocessableError('Hanya jurnal POSTED dapat di-reverse');
@@ -73,38 +78,36 @@ export async function reverseJournal(companyId: string, entryId: string, created
     lines.map((line) => ({ accountId: line.accountId, debit: line.debit, credit: line.credit })),
   );
 
-  return db.transaction(async (tx) => {
-    const id = randomUUID();
-    const period = original.entryDate.slice(0, 4);
-    const docNumber = await nextDocNumber(tx, { companyId, docType: 'JE', prefix: 'JE', period });
+  const id = randomUUID();
+  const period = original.entryDate.slice(0, 4);
+  const docNumber = await nextDocNumber(tx, { companyId, docType: 'JE', prefix: 'JE', period });
 
-    await repo.insertJournalEntry(tx, {
-      id,
-      companyId,
-      docNumber,
-      entryDate: new Date().toISOString().slice(0, 10),
-      description: `Reversal dari ${original.docNumber}`,
-      sourceType: JOURNAL_SOURCE.REVERSAL,
-      sourceId: original.id,
-      status: JOURNAL_STATUS.POSTED,
-      reversalOfId: original.id,
-      postedAt: new Date().toISOString(),
-      createdBy,
-    });
-
-    await repo.insertJournalLines(
-      tx,
-      reversalLines.map((line, index) => ({
-        id: randomUUID(),
-        entryId: id,
-        accountId: line.accountId,
-        lineNumber: index + 1,
-        debit: line.debit,
-        credit: line.credit,
-        description: line.description ?? null,
-      })),
-    );
-
-    return { id, docNumber };
+  await repo.insertJournalEntry(tx, {
+    id,
+    companyId,
+    docNumber,
+    entryDate: new Date().toISOString().slice(0, 10),
+    description: `Reversal dari ${original.docNumber}`,
+    sourceType: JOURNAL_SOURCE.REVERSAL,
+    sourceId: original.id,
+    status: JOURNAL_STATUS.POSTED,
+    reversalOfId: original.id,
+    postedAt: new Date().toISOString(),
+    createdBy,
   });
+
+  await repo.insertJournalLines(
+    tx,
+    reversalLines.map((line, index) => ({
+      id: randomUUID(),
+      entryId: id,
+      accountId: line.accountId,
+      lineNumber: index + 1,
+      debit: line.debit,
+      credit: line.credit,
+      description: line.description ?? null,
+    })),
+  );
+
+  return { id, docNumber };
 }

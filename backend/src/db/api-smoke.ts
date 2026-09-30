@@ -204,6 +204,93 @@ try {
   });
   assert(grnReplay.json().data.id === grnId, 'replay GRN mengembalikan dokumen yang sama (idempotent)');
 
+  console.log('[16] POST /customers → 201');
+  const customerRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/customers',
+    headers: authHeaders,
+    payload: { code: `CUST-API-${randomUUID().slice(0, 6)}`, name: 'Customer API Smoke', creditLimit: '100000000.00', paymentTermDays: 30 },
+  });
+  assert(customerRes.statusCode === 201, `customer dibuat (dapat ${customerRes.statusCode})`);
+  const customerId = customerRes.json().data.id as string;
+
+  console.log('[17] Quotation → accept → convert-to-so');
+  const quoteRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sales/quotations',
+    headers: authHeaders,
+    payload: { quoteDate: '2026-10-05', customerId, tax: '0', lines: [{ itemId: kopi.id, qty: '50', unitPrice: '15000' }] },
+  });
+  assert(quoteRes.statusCode === 201, `quotation dibuat (dapat ${quoteRes.statusCode})`);
+  const quoteId = quoteRes.json().data.id as string;
+
+  const quoteAccept = await app.inject({ method: 'POST', url: `/api/v1/sales/quotations/${quoteId}/accept`, headers: authHeaders });
+  assert(quoteAccept.statusCode === 200 && quoteAccept.json().data.status === 'ACCEPTED', 'quotation ACCEPTED');
+
+  const soRes = await app.inject({
+    method: 'POST',
+    url: `/api/v1/sales/quotations/${quoteId}/convert-to-so`,
+    headers: authHeaders,
+    payload: { warehouseId: DEFAULT_WAREHOUSE_ID, soDate: '2026-10-05' },
+  });
+  assert(soRes.statusCode === 201, `SO dari quotation dibuat (dapat ${soRes.statusCode})`);
+  const soId = soRes.json().data.id as string;
+
+  console.log('[18] POST /sales/orders/:id/confirm → CONFIRMED + reserve');
+  const confirmRes = await app.inject({ method: 'POST', url: `/api/v1/sales/orders/${soId}/confirm`, headers: authHeaders });
+  assert(confirmRes.statusCode === 200 && confirmRes.json().data.status === 'CONFIRMED', 'SO dikonfirmasi (credit check lolos)');
+
+  const soDetail = await app.inject({ method: 'GET', url: `/api/v1/sales/orders/${soId}`, headers: authHeaders });
+  const soLineId = soDetail.json().data.lines[0].id as string;
+
+  console.log('[19] POST /sales/deliveries tanpa key → 400; dengan key → 201, replay sama');
+  const doPayload = { soId, doDate: '2026-10-06', lines: [{ soLineId, qtyDelivered: '50' }] };
+  const doNoKey = await app.inject({ method: 'POST', url: '/api/v1/sales/deliveries', headers: authHeaders, payload: doPayload });
+  assert(doNoKey.statusCode === 400, `DO tanpa key ditolak (dapat ${doNoKey.statusCode})`);
+
+  const doKey = randomUUID();
+  const doRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sales/deliveries',
+    headers: { ...authHeaders, 'idempotency-key': doKey },
+    payload: doPayload,
+  });
+  assert(doRes.statusCode === 201, `DO 201 (dapat ${doRes.statusCode})`);
+  const doId = doRes.json().data.id as string;
+
+  const doReplay = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sales/deliveries',
+    headers: { ...authHeaders, 'idempotency-key': doKey },
+    payload: doPayload,
+  });
+  assert(doReplay.json().data.id === doId, 'replay DO mengembalikan dokumen yang sama (idempotent)');
+
+  console.log('[20] POST /sales/invoices dengan key → 201, replay sama, jurnal AR ter-generate');
+  const invPayload = { doId, invoiceDate: '2026-10-06', tax: '0' };
+  const invKey = randomUUID();
+  const invRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sales/invoices',
+    headers: { ...authHeaders, 'idempotency-key': invKey },
+    payload: invPayload,
+  });
+  assert(invRes.statusCode === 201, `invoice 201 (dapat ${invRes.statusCode})`);
+  assert(invRes.json().data.total === '750000.00', `total invoice = ${invRes.json().data.total}`);
+  const invoiceId = invRes.json().data.id as string;
+
+  const invReplay = await app.inject({
+    method: 'POST',
+    url: '/api/v1/sales/invoices',
+    headers: { ...authHeaders, 'idempotency-key': invKey },
+    payload: invPayload,
+  });
+  assert(invReplay.json().data.id === invoiceId, 'replay invoice mengembalikan dokumen yang sama (idempotent)');
+
+  console.log('[21] POST /sales/invoices/:id/void → VOID + reversal');
+  const voidRes = await app.inject({ method: 'POST', url: `/api/v1/sales/invoices/${invoiceId}/void`, headers: authHeaders });
+  assert(voidRes.statusCode === 200 && voidRes.json().data.status === 'VOID', 'invoice VOID + reversal');
+
   console.log('\nAPI SMOKE TEST: LULUS');
 } finally {
   await app.close();

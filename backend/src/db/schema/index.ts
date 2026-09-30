@@ -3,3 +3,4 @@ export * from './iam.schema.ts';
 export * from './finance.schema.ts';
 export * from './inventory.schema.ts';
 export * from './procurement.schema.ts';
+export * from './sales.schema.ts';

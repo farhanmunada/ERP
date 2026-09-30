@@ -27,6 +27,13 @@ import { approvePr, createPr } from '../modules/procurement/pr.service.ts';
 import { approvePo, convertPrToPo, createPo, getPo, submitPo } from '../modules/procurement/po.service.ts';
 import { createGrn } from '../modules/procurement/grn.service.ts';
 import { createBill, overrideBill, postBill } from '../modules/procurement/bill.service.ts';
+import { customers, creditNotes, customerInvoices, deliveryOrders, quotations, salesOrders } from '../db/schema/sales.schema.ts';
+import { createCustomer } from '../modules/sales/customer.service.ts';
+import { acceptQuotation, createQuotation } from '../modules/sales/quotation.service.ts';
+import { confirmSo, convertQuotationToSo, createSo, getSo } from '../modules/sales/so.service.ts';
+import { createDelivery } from '../modules/sales/do.service.ts';
+import { createInvoice, getInvoice, voidInvoice } from '../modules/sales/invoice.service.ts';
+import { createCreditNote } from '../modules/sales/credit-note.service.ts';
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`SMOKE FAIL: ${message}`);
@@ -48,8 +55,11 @@ try {
   await createAccount({ companyId, code: '2130', name: 'GRN Accrual', type: 'LIABILITY' });
   await createAccount({ companyId, code: '2100', name: 'Utang Usaha', type: 'LIABILITY' });
   await createAccount({ companyId, code: '2120', name: 'PPN Masukan', type: 'ASSET' });
+  await createAccount({ companyId, code: '1200', name: 'Piutang Usaha', type: 'ASSET' });
+  await createAccount({ companyId, code: '2110', name: 'PPN Keluaran', type: 'LIABILITY' });
+  await createAccount({ companyId, code: '5100', name: 'HPP', type: 'EXPENSE' });
   const accounts = await listAccounts(companyId);
-  assert(accounts.length === 7, 'COA tersimpan 7 akun');
+  assert(accounts.length === 10, 'COA tersimpan 10 akun');
 
   console.log('[3] Post journal (balanced)');
   const journal = await postJournal(
@@ -347,6 +357,93 @@ try {
   const tbFinal = await trialBalance(companyId);
   assert(tbFinal.balanced, 'trial balance seimbang setelah bill PPN');
 
+  console.log('[22] Sales: customer + Quotation 200 @ 15.000 → accept → convert ke SO');
+  const customerId = await createCustomer({
+    companyId,
+    code: 'CUST-SMK',
+    name: 'Toko Smoke',
+    creditLimit: '5000000.00',
+    paymentTermDays: 30,
+  });
+  const quotation = await createQuotation({
+    companyId,
+    quoteDate: '2026-10-05',
+    customerId,
+    tax: '0',
+    lines: [{ itemId: itemMa, qty: '200', unitPrice: '15000' }],
+    userId,
+  });
+  assert(quotation.total === '3000000.00', `total quotation = ${quotation.total}`);
+  await acceptQuotation(companyId, quotation.id, userId);
+  const soFromQuote = await convertQuotationToSo({ companyId, quotationId: quotation.id, warehouseId: whA, soDate: '2026-10-05', userId });
+  assert(soFromQuote.status === 'DRAFT', `SO dari quotation status = ${soFromQuote.status}`);
+  assert(soFromQuote.total === '3000000.00', `total SO = ${soFromQuote.total}`);
+
+  console.log('[23] SO confirm: credit check lolos + soft reserve (reserved 200, on-hand tetap)');
+  const stockBeforeReserve = await listStock(companyId, { itemId: itemMa, warehouseId: whA });
+  const onHandBefore = stockBeforeReserve[0]?.onHand ?? '0.0000';
+  const confirmed = await confirmSo(companyId, soFromQuote.id, userId);
+  assert(confirmed.status === 'CONFIRMED', `SO status = ${confirmed.status}`);
+  const stockReserved = await listStock(companyId, { itemId: itemMa, warehouseId: whA });
+  assert(stockReserved[0]?.reserved === '200.0000', `reserved = ${stockReserved[0]?.reserved}`);
+  assert(stockReserved[0]?.onHand === onHandBefore, `on-hand tidak berubah saat reserve = ${stockReserved[0]?.onHand}`);
+
+  console.log('[24] Credit check: SO melebihi limit ditolak (422)');
+  const bigSo = await createSo({
+    companyId,
+    soDate: '2026-10-05',
+    customerId,
+    warehouseId: whA,
+    tax: '0',
+    lines: [{ itemId: itemMa, qty: '400', unitPrice: '15000' }],
+    userId,
+  });
+  let creditRejected = false;
+  try {
+    await confirmSo(companyId, bigSo.id, userId);
+  } catch (error) {
+    creditRejected = error instanceof Error && error.message.includes('credit limit');
+  }
+  assert(creditRejected, 'SO melebihi credit limit ditolak');
+
+  console.log('[25] Delivery Order 200 → on-hand turun, reserved kembali 0');
+  const delivery = await createDelivery({
+    companyId,
+    soId: soFromQuote.id,
+    doDate: '2026-10-06',
+    lines: [{ soLineId: (await getSo(companyId, soFromQuote.id)).lines[0]!.id, qtyDelivered: '200' }],
+    userId,
+  });
+  assert(delivery.status === 'POSTED', `DO status = ${delivery.status}`);
+  const stockAfterDo = await listStock(companyId, { itemId: itemMa, warehouseId: whA });
+  assert(stockAfterDo[0]?.reserved === '0.0000', `reserved setelah DO = ${stockAfterDo[0]?.reserved}`);
+
+  console.log('[26] Customer Invoice → jurnal AR/Sales/COGS/Inventory, TB seimbang');
+  const invoice = await createInvoice({ companyId, doId: delivery.id, invoiceDate: '2026-10-06', tax: '0', userId });
+  assert(invoice.total === '3000000.00', `total invoice = ${invoice.total}`);
+  assert(Number(invoice.cogs) > 0, `COGS terhitung = ${invoice.cogs}`);
+  const tbAfterInvoice = await trialBalance(companyId);
+  assert(tbAfterInvoice.balanced, 'trial balance seimbang setelah invoice');
+
+  console.log('[27] Credit note parsial 50 unit → jurnal balik revenue & COGS');
+  const invoiceLines = (await getInvoice(companyId, invoice.id)).lines;
+  const creditNote = await createCreditNote({
+    companyId,
+    invoiceId: invoice.id,
+    cnDate: '2026-10-07',
+    lines: [{ invoiceLineId: invoiceLines[0]!.id, qty: '50' }],
+    userId,
+  });
+  assert(creditNote.total === '750000.00', `total credit note = ${creditNote.total}`);
+  const tbAfterCn = await trialBalance(companyId);
+  assert(tbAfterCn.balanced, 'trial balance seimbang setelah credit note');
+
+  console.log('[28] Void invoice → jurnal reversal (jurnal asal tidak diubah)');
+  const voided = await voidInvoice(companyId, invoice.id, userId);
+  assert(voided.status === 'VOID', `invoice status = ${voided.status}`);
+  const tbAfterVoid = await trialBalance(companyId);
+  assert(tbAfterVoid.balanced, 'trial balance seimbang setelah void');
+
   console.log('\nSMOKE TEST TIER 2: LULUS');
 } finally {
   // Child tables have no company_id; remove them via subquery before their parents.
@@ -366,6 +463,33 @@ try {
     'DELETE rl FROM purchase_requisition_lines rl JOIN purchase_requisitions r ON r.id = rl.pr_id WHERE r.company_id = ?',
     [companyId],
   );
+  // Sales child tables (no company_id) via subquery before their parents.
+  await pool.query(
+    'DELETE cnl FROM credit_note_lines cnl JOIN credit_notes cn ON cn.id = cnl.cn_id WHERE cn.company_id = ?',
+    [companyId],
+  );
+  await pool.query(
+    'DELETE cil FROM customer_invoice_lines cil JOIN customer_invoices ci ON ci.id = cil.invoice_id WHERE ci.company_id = ?',
+    [companyId],
+  );
+  await pool.query(
+    'DELETE dol FROM delivery_order_lines dol JOIN delivery_orders d ON d.id = dol.do_id WHERE d.company_id = ?',
+    [companyId],
+  );
+  await pool.query(
+    'DELETE sol FROM sales_order_lines sol JOIN sales_orders s ON s.id = sol.so_id WHERE s.company_id = ?',
+    [companyId],
+  );
+  await pool.query(
+    'DELETE ql FROM quotation_lines ql JOIN quotations q ON q.id = ql.quotation_id WHERE q.company_id = ?',
+    [companyId],
+  );
+  await db.delete(creditNotes).where(eq(creditNotes.companyId, companyId));
+  await db.delete(customerInvoices).where(eq(customerInvoices.companyId, companyId));
+  await db.delete(deliveryOrders).where(eq(deliveryOrders.companyId, companyId));
+  await db.delete(salesOrders).where(eq(salesOrders.companyId, companyId));
+  await db.delete(quotations).where(eq(quotations.companyId, companyId));
+  await db.delete(customers).where(eq(customers.companyId, companyId));
   await db.delete(vendorBills).where(eq(vendorBills.companyId, companyId));
   await db.delete(goodsReceipts).where(eq(goodsReceipts.companyId, companyId));
   await db.delete(purchaseOrders).where(eq(purchaseOrders.companyId, companyId));

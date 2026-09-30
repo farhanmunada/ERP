@@ -18,6 +18,8 @@ import {
   IconStore,
   IconFileText,
   IconReceipt,
+  IconUsers,
+  IconCart,
 } from '../shared/components/icons.tsx';
 
 interface NavItem {
@@ -49,6 +51,16 @@ const NAV_SECTIONS: readonly { readonly title: string; readonly items: readonly 
       { to: '/procurement/po', label: 'Purchase Order', icon: IconTruck },
       { to: '/procurement/grn', label: 'Penerimaan Barang', icon: IconReceipt },
       { to: '/procurement/bills', label: 'Tagihan Vendor', icon: IconFileText },
+    ],
+  },
+  {
+    title: 'Penjualan',
+    items: [
+      { to: '/master/customers', label: 'Master Customer', icon: IconUsers },
+      { to: '/sales/quotations', label: 'Quotation', icon: IconCart },
+      { to: '/sales/orders', label: 'Sales Order', icon: IconClipboard },
+      { to: '/sales/deliveries', label: 'Delivery Order', icon: IconTruck },
+      { to: '/sales/invoices', label: 'Customer Invoice', icon: IconFileText },
     ],
   },
   {
@@ -93,7 +105,7 @@ export function AppShell() {
             </div>
           </div>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
-            P0c
+            P0d
           </span>
         </div>
 
