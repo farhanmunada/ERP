@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Navigate } from 'react-router-dom';
 
 import { useAuth } from './auth-context.tsx';
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [companyId, setCompanyId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault();

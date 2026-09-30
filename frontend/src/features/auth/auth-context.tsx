@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { apiRequest, setAccessToken } from '../../shared/lib/api-client.ts';
+import { apiRequest, getAccessToken, setAccessToken } from '../../shared/lib/api-client.ts';
 
 export interface AuthUser {
   readonly id: string;
@@ -24,8 +24,20 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const USER_KEY = 'erp.user';
+
+function readStoredUser(): AuthUser | null {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => (getAccessToken() ? readStoredUser() : null));
 
   const login = useCallback(async (email: string, password: string, companyId: string) => {
     const result = await apiRequest<LoginResponse>('/auth/login', {
@@ -34,13 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companyId,
     });
     setAccessToken(result.accessToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(result.user));
     setUser(result.user);
   }, []);
 
   const logout = useCallback(async () => {
-    await apiRequest('/auth/logout', { method: 'POST' });
-    setAccessToken(null);
-    setUser(null);
+    try {
+      await apiRequest('/auth/logout', { method: 'POST' });
+    } finally {
+      setAccessToken(null);
+      localStorage.removeItem(USER_KEY);
+      setUser(null);
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(
