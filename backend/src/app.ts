@@ -5,6 +5,7 @@ import jwt from '@fastify/jwt';
 import { env } from './core/config/env.ts';
 import { loggerOptions } from './core/logger.ts';
 import { registerErrorHandler } from './core/middleware/error-handler.ts';
+import { iamRoutes } from './modules/iam/index.ts';
 
 export function buildApp() {
   const app = Fastify({ logger: loggerOptions });
@@ -16,6 +17,13 @@ export function buildApp() {
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
+
+  app.register(
+    async (api) => {
+      await iamRoutes(api);
+    },
+    { prefix: '/api/v1' },
+  );
 
   registerErrorHandler(app);
 
