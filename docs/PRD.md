@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD) — ERP Modular (Retail/Distribusi)
 
-> **Status: DRAFT — MENUNGGU GERBANG 1 (Human PRD Approval)**
+> **Status: APPROVED ✅ (Gerbang 1 lulus — disetujui operator)**
 > Bahasa: Indonesia (istilah teknis/identifier tetap English).
 > Basis fakta: `docs/RESEARCH.md`. Keputusan arsitektur: `docs/ADR/`.
 > Versi: 1.0.0 · Fase: 3 (Spec & Behavior Definition)
@@ -719,4 +719,4 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 
 ---
 
-> **Catatan Gerbang 1:** PRD ini berstatus **DRAFT**. DILARANG menulis kode, migrasi, atau skema sebelum operator memberi status **APPROVED**.
+> **Catatan:** PRD ini berstatus **APPROVED** (Gerbang 1 lulus). Rencana arsitektur & eksekusi ada di `docs/ARCHITECTURE.md`.
