@@ -14,6 +14,7 @@ Sistem ERP modular berbasis web/API sebagai *single source of truth* operasional
 | Berkas | Isi |
 |---|---|
 | `AGENTS.md` | Aturan rekayasa & lifecycle agen. |
+| `docs/PANDUAN.md` | **Panduan bahasa awam** — ERP ini apa, cara kerja, kamus istilah, cara jalan. |
 | `docs/RESEARCH.md` | Riset domain & teknis (Fase 2). |
 | `docs/PRD.md` | Product Requirements Document (APPROVED). |
 | `docs/ARCHITECTURE.md` | Arsitektur & status implementasi. |

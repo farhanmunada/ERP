@@ -285,3 +285,60 @@ Hasil `grep` di `C:\Users\vola\agentVault\06-Bug-Solutions\INDEX-BUGS.md`: **7 a
 5. Pelajaran bug-memory lintas-projek (§6) wajib diterapkan sejak awal.
 
 **Basis fakta ini menjadi input langsung untuk `docs/PRD.md` (Fase 3).**
+
+---
+
+## 11. Riset Tambahan — Slice P1a (Payment AR/AP)
+
+> Ditambahkan saat perluasan PRD ke P1a (Fase 3 ulang). Fokus: reuse, bukan dependensi baru.
+
+### 11.1 Temuan Reuse Codebase (Fakta Terverifikasi)
+
+| Kebutuhan P1a | Yang sudah ada (reuse) | Sumber |
+|---|---|---|
+| Jurnal otomatis | `postJournalTx(tx, input, userId)` + `JOURNAL_SOURCE` | `modules/finance/journal.service.ts` |
+| Reversal void | `reverseJournalTx(tx, companyId, entryId, userId)` | `modules/finance/journal.service.ts` |
+| Penomoran dokumen | `nextDocNumber(tx, {docType, prefix, period})` (row lock) | `core/sequence/doc-number.ts` |
+| Idempotency | `withIdempotency(request, reply, produce, status)` + `idempotencyPreHandler` | `core/middleware/idempotency.middleware.ts` |
+| Audit & Outbox | `writeAuditLog` / `writeOutboxEvent` (in-tx) | `core/audit/`, `core/outbox/` |
+| Resolve akun COA | `resolveAccountId(companyId, code)` | `modules/finance/coa.service.ts` |
+| Outstanding AR (dokumen) | `outstandingFor(tx, companyId, customerId)` | `modules/sales/credit.service.ts` |
+| Pola modul/route | Route→Controller→Service→Repo (P0c/P0d) | `modules/procurement`, `modules/sales` |
+
+**Kesimpulan:** P1a **tanpa dependensi baru**. Semua primitif (jurnal, reversal, sequence, idempotency, audit, outbox) sudah tersedia dan terverifikasi di P0a–P0d.
+
+### 11.2 Keputusan Domain (Disetujui Operator)
+
+| Aspek | Keputusan | Alasan |
+|---|---|---|
+| Akun kas/bank | Pilih `account_id` COA saat bayar; default `1100 Kas` | Hindari master bank baru (Ponytail/YAGNI) |
+| Overpayment | Dilarang; `amount` = Σ alokasi | Cegah advance/unapplied yang menambah kompleksitas |
+| Alokasi | 1 pembayaran → N invoice/bill | Realistis (transfer gabungan) |
+| PPh 23 / biaya bank / diskon | Di luar cakupan P1a | Ditunda; dicatat sebagai limitation |
+| Due date aging | Snapshot `due_date` di dokumen saat dibuat | Deterministik & historis (term master bisa berubah) |
+| Modul | Modul baru `payment` (AR+AP), endpoint `/payments/*` | Terpusat, hindari duplikasi AR-di-sales/AP-di-procurement |
+
+### 11.3 Pemicu Jurnal Payment (Retail)
+
+| Event | Debit | Kredit |
+|---|---|---|
+| Penerimaan piutang (AR) | 1100 Kas | 1200 Piutang Usaha |
+| Pembayaran utang (AP) | 2100 Utang Usaha | 1100 Kas |
+| Void penerimaan (reversal) | 1200 Piutang Usaha | 1100 Kas |
+| Void pembayaran (reversal) | 1100 Kas | 2100 Utang Usaha |
+
+> Tanpa akun COA baru. `1100/1200/2100` sudah ada di `seed-data.ts DEFAULT_COA`.
+
+### 11.4 Catatan Bug Memory (Retrieval Gate)
+
+- **BUG-20260930-13** (credit check AR berbasis dokumen) **relevan langsung**: P1a memperluas `outstandingFor` agar ikut mengurangi Σ alokasi penerimaan POSTED. Asersi smoke credit-limit lama harus tetap lulus.
+- **BUG-20260930-10** (idempotency replay side-effect dobel): endpoint pembayaran idempotent wajib cek replay **sebelum** side-effect.
+- **BUG-20260930-09** (urutan non-deterministik): aging/outstanding harus deterministik (urutan by `due_date`, `doc_number`).
+
+### 11.5 Limitation P1a
+
+- Tanpa PPh 23 (withholding) / biaya transfer / cash discount.
+- Tanpa advance/unapplied payment (overpayment dilarang).
+- Tanpa rekonsiliasi bank statement.
+- Tanpa multi-currency (IDR tunggal).
+

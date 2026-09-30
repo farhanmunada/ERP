@@ -1,9 +1,9 @@
 # Product Requirements Document (PRD) — ERP Modular (Retail/Distribusi)
 
-> **Status: APPROVED ✅ (Gerbang 1 lulus — disetujui operator)**
+> **Status: P0 APPROVED ✅ (Gerbang 1 lulus — disetujui operator) · P1a DITAMBAHKAN ⏳ (menunggu Gerbang 1 ulang)**
 > Bahasa: Indonesia (istilah teknis/identifier tetap English).
 > Basis fakta: `docs/RESEARCH.md`. Keputusan arsitektur: `docs/ADR/`.
-> Versi: 1.0.0 · Fase: 3 (Spec & Behavior Definition)
+> Versi: 1.1.0 · Fase: 3 (Spec & Behavior Definition)
 
 ---
 
@@ -36,7 +36,7 @@ Organisasi retail/distribusi enterprise menjalankan operasional lintas divisi (g
 ### 2.2 Non-Goals (Out-of-Scope — eksplisit)
 
 1. **Manufaktur:** TIDAK ada BOM, Work Order, routing, WIP, atau overhead absorption. (Target retail/distribusi.)
-2. **Pembayaran (AR/AP payment) & Payment Gateway:** TIDAK dicatat di P0; berhenti di Invoice. Payment masuk P1.
+2. **Pembayaran (AR/AP payment) & Payment Gateway:** Penerimaan piutang (AR) & pembayaran utang (AP) **DICAKUP di P1a** (lihat §4 Modul 6). **Payment Gateway** (integrasi eksternal) TIDAK dicakup; ditunda ke P1c.
 3. **Multi-currency:** TIDAK ada. Hanya IDR tunggal.
 4. **Integrasi eksternal (Tax API, Shipping Aggregator, e-Faktur):** TIDAK di P0; hanya kontrak REST disiapkan untuk P1.
 5. **gRPC:** TIDAK di P0; hanya REST.
@@ -286,6 +286,90 @@ Organisasi retail/distribusi enterprise menjalankan operasional lintas divisi (g
   - WHEN Manager membuka Balance Sheet per tanggal X
   - THEN Assets = Liabilities + Equity (balance).
 
+### Modul 6 — Payment AR/AP (Penerimaan Piutang & Pembayaran Utang) *(P1a)*
+
+> **Lingkup:** menutup loop Order-to-Cash (P0d) & Procure-to-Pay (P0c) yang berhenti di Invoice/Bill. Mencatat penerimaan piutang (AR) dan pembayaran utang (AP), alokasi ke dokumen, jurnal otomatis, void (reversal), dan laporan aging.
+> **Limitation P1a:** tanpa PPh 23 / biaya transfer / cash discount; tanpa advance/unapplied payment (overpayment dilarang); tanpa rekonsiliasi bank statement. Payment Gateway ditunda ke P1c.
+
+**Story 6.1:** Sebagai Sales Officer/Finance, saya ingin mencatat penerimaan pembayaran customer (AR) agar piutang berkurang & kas bertambah.
+
+- **6.1.1**
+  - GIVEN invoice `INV/2026/00001` berstatus `POSTED` senilai 3.000.000
+  - WHEN Sales Officer mencatat penerimaan 3.000.000 ke akun `1100 Kas` dengan tanggal bayar
+  - THEN tersimpan `customer_payment` (`RCP/2026/00001`, status `POSTED`) dengan alokasi penuh ke invoice, jurnal **Debit 1100 Kas 3.000.000 / Kredit 1200 Piutang Usaha 3.000.000** dibuat atomic, dan outstanding invoice menjadi 0.
+- **6.1.2**
+  - GIVEN invoice outstanding 3.000.000
+  - WHEN Officer mencatat penerimaan 5.000.000 (melebihi total alokasi)
+  - THEN sistem menolak `422` "Jumlah pembayaran melebihi total alokasi" (overpayment dilarang).
+- **6.1.3**
+  - GIVEN satu transfer melunasi 2 invoice (1.000.000 + 2.000.000)
+  - WHEN Officer mencatat penerimaan 3.000.000 dengan 2 baris alokasi
+  - THEN kedua invoice outstanding = 0 dan hanya **satu** jurnal dibuat (1 pembayaran → N alokasi).
+- **6.1.4**
+  - GIVEN invoice berstatus `VOID`
+  - WHEN Officer mencoba mengalokasi pembayaran ke invoice tersebut
+  - THEN sistem menolak `422` "Hanya invoice POSTED dapat dialokasi".
+- **6.1.5**
+  - GIVEN alokasi 4.000.000 ke invoice yang outstanding-nya 3.000.000
+  - WHEN menyimpan pembayaran
+  - THEN sistem menolak `422` "Alokasi melebihi outstanding invoice".
+
+**Story 6.2:** Sebagai Finance Manager, saya ingin mencatat pembayaran tagihan vendor (AP) agar utang berkurang & kas keluar tercatat.
+
+- **6.2.1**
+  - GIVEN bill `BILL/2026/00001` berstatus `POSTED` senilai 1.110.000
+  - WHEN Finance mencatat pembayaran ke akun `1100 Kas`
+  - THEN tersimpan `vendor_payment` (`PAY/2026/00001`, status `POSTED`), jurnal **Debit 2100 Utang Usaha 1.110.000 / Kredit 1100 Kas 1.110.000** dibuat atomic, dan outstanding bill = 0.
+- **6.2.2**
+  - GIVEN bill outstanding 1.110.000
+  - WHEN Finance membayar 2.000.000
+  - THEN sistem menolak `422` "Jumlah pembayaran melebihi total alokasi".
+- **6.2.3**
+  - GIVEN bill berstatus `DRAFT`/`MATCH_EXCEPTION` (belum `POSTED`)
+  - WHEN Finance mencoba mengalokasi pembayaran
+  - THEN sistem menolak `422` "Hanya bill POSTED dapat dialokasi".
+- **6.2.4**
+  - GIVEN 3 bill terbuka milik 1 vendor
+  - WHEN Finance mencatat 1 pembayaran dengan 3 baris alokasi
+  - THEN ketiga bill outstanding = 0 dan hanya **satu** jurnal dibuat.
+
+**Story 6.3:** Sebagai Finance Manager, saya ingin void pembayaran (reversal) agar kesalahan terkoreksi tanpa menghapus data.
+
+- **6.3.1**
+  - GIVEN `customer_payment` berstatus `POSTED`
+  - WHEN Finance melakukan void
+  - THEN sistem membuat **reversal journal** (Debit 1200 Piutang / Kredit 1100 Kas) dengan `reversal_of_id` menunjuk jurnal asal, status pembayaran → `VOID`, jurnal asal TIDAK diubah, dan outstanding invoice kembali naik.
+- **6.3.2**
+  - GIVEN pembayaran sudah berstatus `VOID`
+  - WHEN Finance mencoba void ulang
+  - THEN sistem menolak `422` "Pembayaran sudah dibatalkan".
+- **6.3.3**
+  - GIVEN `vendor_payment` berstatus `POSTED`
+  - WHEN Finance void
+  - THEN reversal journal (Debit 1100 Kas / Kredit 2100 Utang Usaha) dibuat dan outstanding bill kembali naik.
+
+**Story 6.4:** Sebagai Finance Manager, saya ingin outstanding AR/AP konsisten dengan pembayaran agar credit limit akurat.
+
+- **6.4.1**
+  - GIVEN invoice POSTED 3.000.000 dan penerimaan 1.000.000
+  - WHEN sistem menghitung outstanding customer
+  - THEN outstanding = 2.000.000 (Σ invoice POSTED − Σ credit note − Σ alokasi penerimaan POSTED).
+- **6.4.2**
+  - GIVEN customer limit 5.000.000, invoice POSTED 4.500.000, penerimaan 4.000.000
+  - WHEN Officer mengonfirmasi SO 4.000.000
+  - THEN SO `CONFIRMED` (outstanding = 500.000; 500.000 + 4.000.000 ≤ 5.000.000).
+
+**Story 6.5:** Sebagai Finance Manager, saya ingin laporan aging AR/AP agar penagihan & pembayaran terkendali.
+
+- **6.5.1**
+  - GIVEN invoice dengan `due_date` 45 hari lampau dan belum lunas
+  - WHEN Manager membuka Aging AR per tanggal
+  - THEN invoice masuk bucket `31–60` hari.
+- **6.5.2**
+  - GIVEN data AR/AP tersedia
+  - WHEN Manager membuka Aging AP
+  - THEN tiap bucket menampilkan Σ outstanding, dan `Σ bucket = total outstanding` (rekonsiliasi).
+
 ### Cross-Cutting — Audit, Idempotency, Event
 
 **Story 6.1:** Sebagai Auditor, saya ingin audit trail lengkap agar setiap mutasi dapat dilacak.
@@ -431,11 +515,14 @@ Fitur dinyatakan selesai bila:
 | `/sales/orders` | Sales Order | Sales |
 | `/sales/deliveries` | Delivery Order | Warehouse/Sales |
 | `/sales/invoices` | Customer Invoice | Finance |
+| `/finance/ar-payments` | Penerimaan Piutang (AR) + alokasi multi-invoice *(P1a)* | Finance/Sales |
+| `/finance/ap-payments` | Pembayaran Utang (AP) + alokasi multi-bill *(P1a)* | Finance |
 | `/finance/journals` | Journal Entries (list + detail, reversal) | Finance |
 | `/finance/reports/trial-balance` | Trial Balance | Finance |
 | `/finance/reports/balance-sheet` | Balance Sheet | Finance |
 | `/finance/reports/profit-loss` | Profit & Loss | Finance |
 | `/finance/reports/general-ledger` | General Ledger | Finance |
+| `/finance/reports/aging` | Aging AR/AP *(P1a)* | Finance |
 | `/audit/logs` | Audit Trail (read-only, filter) | Auditor/Admin |
 
 ### 7.3 Wireframe Deskriptif (halaman kunci)
@@ -614,6 +701,19 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 | GET | `/finance/reports/profit-loss` | P&L |
 | GET | `/finance/reports/general-ledger` | General Ledger |
 
+**Payment AR/AP** *(P1a)*
+| Method | Path | Deskripsi |
+|---|---|---|
+| POST/GET | `/payments/ar` | Penerimaan piutang (idempotent) |
+| GET | `/payments/ar/:id` | Detail penerimaan |
+| POST | `/payments/ar/:id/void` | Void penerimaan (reversal) |
+| GET | `/payments/ar/open?customerId=` | Invoice terbuka + outstanding |
+| POST/GET | `/payments/ap` | Pembayaran utang (idempotent) |
+| GET | `/payments/ap/:id` | Detail pembayaran |
+| POST | `/payments/ap/:id/void` | Void pembayaran (reversal) |
+| GET | `/payments/ap/open?vendorId=` | Bill terbuka + outstanding |
+| GET | `/finance/reports/aging?type=AR\|AP&asOf=` | Laporan Aging AR/AP |
+
 **Cross-cutting**
 | Method | Path | Deskripsi |
 |---|---|---|
@@ -700,6 +800,38 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 }
 ```
 
+**POST `/payments/ar` (idempotent)**
+```json
+// Headers: Idempotency-Key: <uuid>
+// Request
+{
+  "customerId": "uuid",
+  "paymentDate": "2026-02-14",
+  "cashAccountId": "uuid",
+  "reference": "TRF-123",
+  "allocations": [
+    { "invoiceId": "uuid", "amount": "3000000.00" }
+  ]
+}
+// Response 201
+{
+  "data": {
+    "id": "uuid",
+    "docNumber": "RCP/2026/00001",
+    "status": "POSTED",
+    "total": "3000000.00",
+    "journalEntryId": "uuid",
+    "allocations": [
+      { "invoiceId": "uuid", "amount": "3000000.00" }
+    ]
+  }
+}
+// Response 422 (overpayment)
+{
+  "error": { "code": "UNPROCESSABLE", "message": "Jumlah pembayaran melebihi total alokasi" }
+}
+```
+
 ---
 
 ## 9. Rencana Rilis Bertahap (Vertical Slice)
@@ -710,7 +842,12 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 | P0b | Inventory (stock, movement, transfer, opname, valuasi) | ✅ Selesai (Moving Average + FIFO, batch/serial, opname→jurnal) |
 | P0c | Procurement (PR→PO→GRN→Bill + 3-way matching) | ✅ Selesai (toleransi 2%/2%, PPN opsional, GRN→jurnal otomatis, approval matrix PO) |
 | P0d | Sales (Quotation→SO→DO→Invoice + credit + reserve) | ✅ Selesai (credit check + soft reserve, jurnal AR/Penjualan/HPP, void & nota kredit) |
-| P1 | Payment AR/AP, Payment Gateway, gRPC, Tax API, field/row-level RBAC, CQRS | Di luar P0 |
+| **P1a** | Payment AR/AP (penerimaan piutang + pembayaran utang, alokasi multi-dokumen, void, aging) | ⏳ Direncanakan (Gerbang 1) |
+| P1b | Outbox relay + broker (RabbitMQ/Redis) | Di luar P0 |
+| P1c | Payment Gateway, Tax API/e-Faktur, Shipping Aggregator | Di luar P0 |
+| P1d | Field-level & row-level RBAC | Di luar P0 |
+| P1e | CQRS / read replica | Di luar P0 |
+| — | gRPC (keputusan ADR terpisah, ditunda) | Di luar P0 |
 
 ---
 
