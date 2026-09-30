@@ -708,7 +708,7 @@ Kode: `VALIDATION_ERROR` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FO
 |---|---|---|
 | **P0a** | Bootstrap + IAM & Org Unit + COA + GL double-entry engine + Audit Trail + Outbox | ✅ Selesai |
 | P0b | Inventory (stock, movement, transfer, opname, valuasi) | ✅ Selesai (Moving Average + FIFO, batch/serial, opname→jurnal) |
-| P0c | Procurement (PR→PO→GRN→Bill + 3-way matching) | Menyusul |
+| P0c | Procurement (PR→PO→GRN→Bill + 3-way matching) | ✅ Selesai (toleransi 2%/2%, PPN opsional, GRN→jurnal otomatis, approval matrix PO) |
 | P0d | Sales (Quotation→SO→DO→Invoice + credit + reserve) | Menyusul |
 | P1 | Payment AR/AP, Payment Gateway, gRPC, Tax API, field/row-level RBAC, CQRS | Di luar P0 |
 

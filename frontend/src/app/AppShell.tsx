@@ -14,6 +14,10 @@ import {
   IconArrows,
   IconClipboard,
   IconList,
+  IconTruck,
+  IconStore,
+  IconFileText,
+  IconReceipt,
 } from '../shared/components/icons.tsx';
 
 interface NavItem {
@@ -35,6 +39,16 @@ const NAV_SECTIONS: readonly { readonly title: string; readonly items: readonly 
       { to: '/inventory/movements', label: 'Mutasi Stok', icon: IconList },
       { to: '/inventory/transfer', label: 'Transfer Gudang', icon: IconArrows },
       { to: '/inventory/opname', label: 'Stock Opname', icon: IconClipboard },
+    ],
+  },
+  {
+    title: 'Pengadaan',
+    items: [
+      { to: '/master/vendors', label: 'Master Vendor', icon: IconStore },
+      { to: '/procurement/pr', label: 'Purchase Requisition', icon: IconClipboard },
+      { to: '/procurement/po', label: 'Purchase Order', icon: IconTruck },
+      { to: '/procurement/grn', label: 'Penerimaan Barang', icon: IconReceipt },
+      { to: '/procurement/bills', label: 'Tagihan Vendor', icon: IconFileText },
     ],
   },
   {
@@ -79,7 +93,7 @@ export function AppShell() {
             </div>
           </div>
           <span className="rounded-full bg-slate-800 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
-            P0b
+            P0c
           </span>
         </div>
 

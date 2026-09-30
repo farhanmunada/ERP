@@ -60,3 +60,8 @@ export async function getItem(companyId: string, id: string) {
 export function listItems(companyId: string) {
   return repo.listItems(companyId);
 }
+
+// Lightweight existence check for cross-module validation (e.g. procurement lines).
+export async function itemExists(companyId: string, id: string): Promise<boolean> {
+  return (await repo.findItemById(companyId, id)) !== null;
+}

@@ -9,6 +9,7 @@ import { iamRoutes } from './modules/iam/index.ts';
 import { financeRoutes } from './modules/finance/index.ts';
 import { approvalRoutes } from './modules/approval/index.ts';
 import { inventoryRoutes } from './modules/inventory/index.ts';
+import { procurementRoutes } from './modules/procurement/index.ts';
 import { checkHealth } from './core/health.ts';
 
 export function buildApp() {
@@ -33,6 +34,7 @@ export function buildApp() {
       await financeRoutes(api);
       await approvalRoutes(api);
       await inventoryRoutes(api);
+      await procurementRoutes(api);
     },
     { prefix: '/api/v1' },
   );

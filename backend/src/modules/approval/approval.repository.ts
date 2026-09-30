@@ -33,6 +33,22 @@ export async function findRequest(companyId: string, id: string) {
   return rows[0] ?? null;
 }
 
+// Looks up the active approval request attached to a business document (e.g. a PO).
+export async function findRequestByDocument(companyId: string, documentType: string, documentId: string) {
+  const rows = await db
+    .select()
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.companyId, companyId),
+        eq(approvalRequests.documentType, documentType),
+        eq(approvalRequests.documentId, documentId),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function updateRequest(
   id: string,
   values: Partial<typeof approvalRequests.$inferInsert>,

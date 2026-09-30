@@ -5,24 +5,30 @@ import { eq } from 'drizzle-orm';
 import { db, pool } from '../core/database/client.ts';
 import {
   accounts,
+  approvalRules,
   branches,
   companies,
   items,
   permissions,
+  procurementSettings,
   rolePermissions,
   roles,
   userRoles,
   users,
+  vendors,
   warehouses,
 } from '../db/schema/index.ts';
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_PASSWORD,
+  DEFAULT_APPROVAL_RULES,
   DEFAULT_BRANCH,
   DEFAULT_BRANCH_ID,
   DEFAULT_COA,
   DEFAULT_COMPANY_ID,
   DEFAULT_ITEMS,
+  DEFAULT_TOLERANCE_PCT,
+  DEFAULT_VENDORS,
   DEFAULT_WAREHOUSES,
   PERMISSIONS,
 } from './seed-data.ts';
@@ -140,6 +146,53 @@ async function seed(): Promise<void> {
       })
       .onDuplicateKeyUpdate({ set: { name: item.name, costingMethod: item.costingMethod } });
   }
+
+  console.log('[seed] Master vendors...');
+  for (const vendor of DEFAULT_VENDORS) {
+    await db
+      .insert(vendors)
+      .values({
+        id: randomUUID(),
+        companyId: DEFAULT_COMPANY_ID,
+        code: vendor.code,
+        name: vendor.name,
+        email: vendor.email,
+        phone: vendor.phone,
+        npwp: vendor.npwp,
+        paymentTermDays: vendor.paymentTermDays,
+      })
+      .onDuplicateKeyUpdate({ set: { name: vendor.name } });
+  }
+
+  console.log('[seed] Approval rules + procurement settings...');
+  for (const rule of DEFAULT_APPROVAL_RULES) {
+    const existing = (
+      await db
+        .select()
+        .from(approvalRules)
+        .where(eq(approvalRules.companyId, DEFAULT_COMPANY_ID))
+    ).find((row) => row.documentType === rule.documentType && row.minAmount === rule.minAmount);
+    if (existing) continue;
+    await db.insert(approvalRules).values({
+      id: randomUUID(),
+      companyId: DEFAULT_COMPANY_ID,
+      documentType: rule.documentType,
+      minAmount: rule.minAmount,
+      maxAmount: rule.maxAmount,
+      levels: rule.levels,
+    });
+  }
+
+  await db
+    .insert(procurementSettings)
+    .values({
+      companyId: DEFAULT_COMPANY_ID,
+      qtyTolerancePct: DEFAULT_TOLERANCE_PCT.qty,
+      priceTolerancePct: DEFAULT_TOLERANCE_PCT.price,
+    })
+    .onDuplicateKeyUpdate({
+      set: { qtyTolerancePct: DEFAULT_TOLERANCE_PCT.qty, priceTolerancePct: DEFAULT_TOLERANCE_PCT.price },
+    });
 
   console.log('\n[seed] Selesai.');
   console.log(`  Company ID : ${DEFAULT_COMPANY_ID}`);

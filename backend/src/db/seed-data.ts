@@ -7,8 +7,15 @@ export const PERMISSIONS = [
   { code: 'approval:rule:manage', description: 'Mengelola rule approval' },
   { code: 'approval:decide', description: 'Menyetujui/menolak approval' },
   { code: 'inventory:manage', description: 'Mengelola inventory' },
+  { code: 'vendor:manage', description: 'Mengelola master vendor' },
+  { code: 'pr:create', description: 'Membuat purchase requisition' },
+  { code: 'pr:approve', description: 'Menyetujui purchase requisition' },
   { code: 'po:create', description: 'Membuat purchase order' },
   { code: 'po:approve', description: 'Menyetujui purchase order' },
+  { code: 'grn:create', description: 'Membuat goods receipt' },
+  { code: 'bill:create', description: 'Membuat vendor bill' },
+  { code: 'bill:override', description: 'Override exception 3-way matching' },
+  { code: 'bill:post', description: 'Posting vendor bill' },
   { code: 'so:create', description: 'Membuat sales order' },
   { code: 'so:approve', description: 'Menyetujui sales order' },
 ] as const;
@@ -21,6 +28,7 @@ export const DEFAULT_COA = [
   { code: '2100', name: 'Utang Usaha', type: 'LIABILITY' },
   { code: '2110', name: 'PPN Keluaran', type: 'LIABILITY' },
   { code: '2120', name: 'PPN Masukan', type: 'ASSET' },
+  { code: '2130', name: 'GRN Accrual', type: 'LIABILITY' },
   { code: '3100', name: 'Modal Disetor', type: 'EQUITY' },
   { code: '4100', name: 'Penjualan', type: 'REVENUE' },
   { code: '5100', name: 'Harga Pokok Penjualan', type: 'EXPENSE' },
@@ -48,3 +56,25 @@ export const DEFAULT_ITEMS = [
   { code: 'ITM-003', name: 'Susu UHT 1L (Batch)', uom: 'PCS', costingMethod: 'MOVING_AVERAGE', trackBatch: true, trackSerial: false, reorderPoint: '10' },
   { code: 'ITM-004', name: 'Mesin Espresso Pro (Serial)', uom: 'UNIT', costingMethod: 'FIFO', trackBatch: false, trackSerial: true, reorderPoint: '1' },
 ] as const;
+
+// Sample vendors for procurement smoke/manual testing.
+export const DEFAULT_VENDORS = [
+  { code: 'VND-001', name: 'PT Sumber Kopi Nusantara', email: 'sales@sumberkopi.id', phone: '021-5550101', npwp: '01.234.567.8-901.000', paymentTermDays: 30 },
+  { code: 'VND-002', name: 'CV Aneka Gula Manis', email: 'order@anekagula.id', phone: '021-5550202', npwp: '02.345.678.9-012.000', paymentTermDays: 14 },
+] as const;
+
+// Default PO approval rule: >= 100.000.000 requires Manager (L1) then Director (L2) — PRD 1.3.1.
+export const DEFAULT_APPROVAL_RULES = [
+  {
+    documentType: 'PURCHASE_ORDER',
+    minAmount: '100000000.00',
+    maxAmount: null,
+    levels: [
+      { level: 1, roleCode: 'MANAGER' },
+      { level: 2, roleCode: 'DIRECTOR' },
+    ],
+  },
+] as const;
+
+// Default 3-way matching tolerance (percent) — PRD §7.3.
+export const DEFAULT_TOLERANCE_PCT = { qty: '2.00', price: '2.00' } as const;

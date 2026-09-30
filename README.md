@@ -4,10 +4,10 @@ Sistem ERP modular berbasis web/API sebagai *single source of truth* operasional
 
 ## Status
 
-- **Fase:** Slice **P0a** (IAM + Org + GL Engine + Approval) & **P0b** (Inventory: stock, movement, transfer, opname, valuasi Moving Average + FIFO, batch/serial) — **selesai & terverifikasi**.
+- **Fase:** Slice **P0a** (IAM + Org + GL Engine + Approval), **P0b** (Inventory: stock, movement, transfer, opname, valuasi Moving Average + FIFO, batch/serial), & **P0c** (Procurement P2P: PR → PO → GRN → Vendor Bill + 3-way matching, toleransi 2%/2%, PPN opsional) — **selesai & terverifikasi**.
 - **Infra:** MySQL lokal (Laragon). **Tanpa Docker** — lihat `docs/ADR/0002`.
-- **Tier 1:** typecheck 0 error, 24 unit test pass, frontend build sukses.
-- **Tier 2:** migrasi + smoke test DB nyata **LULUS** (MySQL 8.4.3, 28 tabel, DB smoke + API smoke hijau).
+- **Tier 1:** typecheck 0 error, 30 unit test pass, frontend build sukses.
+- **Tier 2:** migrasi + smoke test DB nyata **LULUS** (MySQL 8.4.3, 39 tabel, DB smoke 21 langkah + API smoke hijau).
 
 ## Dokumen
 
@@ -38,7 +38,7 @@ cd backend
 Copy-Item .env.example .env   # sesuaikan DATABASE_URL ke MySQL lokal
 bun install
 bun run db:migrate            # buat tabel
-bun run db:seed               # company DEMO + admin + 10 akun COA + 2 gudang + 4 item contoh
+bun run db:seed               # company DEMO + admin + 11 akun COA + 2 gudang + 4 item + vendor + rule approval PO + settings
 bun run dev                   # http://localhost:3000  (predev otomatis bebaskan port 3000)
 
 # 3. Frontend
@@ -51,7 +51,7 @@ bun run dev                   # http://localhost:5173
 
 ## Verifikasi
 
-- **Backend:** `cd backend; bunx tsc --noEmit; bun test; bun run db:smoke; bun run src/db/api-smoke.ts`
+- **Backend:** `cd backend; bunx tsc --noEmit; bun test; bun run db:smoke; bun run db:api-smoke`
 - **Frontend:** `cd frontend; bunx tsc --noEmit; bun run build`
 
 ## Troubleshooting

@@ -39,6 +39,20 @@ export interface SubmitInput {
   readonly userId: string;
 }
 
+// Returns the matching rule (or null) so callers can auto-approve when no matrix applies.
+export async function selectApprovalRule(companyId: string, documentType: string, amount: string) {
+  const rules = await repo.listRules(companyId, documentType);
+  return selectRule(
+    rules.map((row) => ({
+      id: row.id,
+      minAmount: row.minAmount,
+      maxAmount: row.maxAmount,
+      levels: row.levels as ApprovalLevel[],
+    })),
+    amount,
+  );
+}
+
 export async function submitForApproval(input: SubmitInput): Promise<string> {
   const rules = await repo.listRules(input.companyId, input.documentType);
   const rule = selectRule(
@@ -88,6 +102,11 @@ export interface DecideInput {
   readonly action: 'APPROVE' | 'REJECT';
   readonly userId: string;
   readonly note?: string;
+}
+
+// Resolves the active approval request for a business document (used by PO submit/approve).
+export async function findApprovalByDocument(companyId: string, documentType: string, documentId: string) {
+  return repo.findRequestByDocument(companyId, documentType, documentId);
 }
 
 export interface DecideResult {

@@ -125,6 +125,85 @@ try {
   const afterOnHand = Number(stock.json().data[0]?.onHand ?? '0');
   assert(stock.statusCode === 200 && afterOnHand === beforeOnHand + 10, `on-hand ${beforeOnHand} → ${afterOnHand}`);
 
+  console.log('[11] GET /procurement/settings → toleransi default 2% / 2%');
+  const settings = await app.inject({ method: 'GET', url: '/api/v1/procurement/settings', headers: authHeaders });
+  assert(settings.statusCode === 200, `settings 200 (dapat ${settings.statusCode})`);
+  assert(settings.json().data.qtyTolerancePct === '2.00', 'toleransi qty default 2.00');
+
+  console.log('[12] POST /vendors → 201');
+  const vendorRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/vendors',
+    headers: authHeaders,
+    payload: { code: `VND-API-${randomUUID().slice(0, 6)}`, name: 'Vendor API Smoke', paymentTermDays: 30 },
+  });
+  assert(vendorRes.statusCode === 201, `vendor dibuat (dapat ${vendorRes.statusCode})`);
+  const vendorId = vendorRes.json().data.id as string;
+
+  console.log('[13] PR → approve → convert-to-po → submit APPROVED');
+  const prRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/procurement/pr',
+    headers: authHeaders,
+    payload: { prDate: '2026-10-01', lines: [{ itemId: kopi.id, qty: '100' }] },
+  });
+  assert(prRes.statusCode === 201, `PR dibuat (dapat ${prRes.statusCode})`);
+  const prId = prRes.json().data.id as string;
+
+  const prApprove = await app.inject({ method: 'POST', url: `/api/v1/procurement/pr/${prId}/approve`, headers: authHeaders });
+  assert(prApprove.statusCode === 200, `PR disetujui (dapat ${prApprove.statusCode})`);
+
+  const poRes = await app.inject({
+    method: 'POST',
+    url: `/api/v1/procurement/pr/${prId}/convert-to-po`,
+    headers: authHeaders,
+    payload: {
+      vendorId,
+      warehouseId: DEFAULT_WAREHOUSE_ID,
+      poDate: '2026-10-01',
+      tax: '0',
+      lines: [{ itemId: kopi.id, qty: '100', unitPrice: '10000' }],
+    },
+  });
+  assert(poRes.statusCode === 201, `PO dari PR dibuat (dapat ${poRes.statusCode})`);
+  const poId = poRes.json().data.id as string;
+
+  const poSubmit = await app.inject({ method: 'POST', url: `/api/v1/procurement/po/${poId}/submit`, headers: authHeaders });
+  assert(poSubmit.statusCode === 200 && poSubmit.json().data.status === 'APPROVED', 'PO submit → APPROVED (nominal < 100jt)');
+
+  const poDetail = await app.inject({ method: 'GET', url: `/api/v1/procurement/po/${poId}`, headers: authHeaders });
+  const poLineId = poDetail.json().data.lines[0].id as string;
+
+  console.log('[14] POST /procurement/grn tanpa Idempotency-Key → 400');
+  const grnNoKey = await app.inject({
+    method: 'POST',
+    url: '/api/v1/procurement/grn',
+    headers: authHeaders,
+    payload: { poId, warehouseId: DEFAULT_WAREHOUSE_ID, grnDate: '2026-10-02', lines: [{ poLineId, qtyReceived: '100' }] },
+  });
+  assert(grnNoKey.statusCode === 400, `GRN tanpa key ditolak (dapat ${grnNoKey.statusCode})`);
+
+  console.log('[15] POST /procurement/grn dengan key → 201, replay sama');
+  const grnKey = randomUUID();
+  const grnPayload = { poId, warehouseId: DEFAULT_WAREHOUSE_ID, grnDate: '2026-10-02', lines: [{ poLineId, qtyReceived: '100' }] };
+  const grnRes = await app.inject({
+    method: 'POST',
+    url: '/api/v1/procurement/grn',
+    headers: { ...authHeaders, 'idempotency-key': grnKey },
+    payload: grnPayload,
+  });
+  assert(grnRes.statusCode === 201, `GRN 201 (dapat ${grnRes.statusCode})`);
+  assert(grnRes.json().data.journalEntryId !== null, 'GRN men-generate jurnal');
+  const grnId = grnRes.json().data.id as string;
+
+  const grnReplay = await app.inject({
+    method: 'POST',
+    url: '/api/v1/procurement/grn',
+    headers: { ...authHeaders, 'idempotency-key': grnKey },
+    payload: grnPayload,
+  });
+  assert(grnReplay.json().data.id === grnId, 'replay GRN mengembalikan dokumen yang sama (idempotent)');
+
   console.log('\nAPI SMOKE TEST: LULUS');
 } finally {
   await app.close();

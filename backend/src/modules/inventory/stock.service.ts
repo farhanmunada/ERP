@@ -123,6 +123,11 @@ async function insertSerials(
 }
 
 export async function stockIn(input: StockInInput): Promise<MovementResult> {
+  return runInTransaction((tx) => stockInTx(tx, input));
+}
+
+// Transactional variant: runs inside the caller's tx so GRN can stay atomic with its journal.
+export async function stockInTx(tx: Tx, input: StockInInput): Promise<MovementResult> {
   const item = await requireItem(input.companyId, input.itemId);
   assertTracking(item, { quantity: input.quantity, batchNo: input.batchNo, serialNumbers: input.serialNumbers });
 
@@ -130,62 +135,60 @@ export async function stockIn(input: StockInInput): Promise<MovementResult> {
   const inQtyUnits = toQtyUnits(input.quantity);
   const inUnitCostCents = toMinorUnits(input.unitCost);
 
-  return runInTransaction(async (tx) => {
-    const row = await ensureStockRow(tx, input.companyId, input.itemId, input.warehouseId);
-    const layers = method === 'FIFO' ? await lockFifoLayers(tx, input.itemId, input.warehouseId) : [];
+  const row = await ensureStockRow(tx, input.companyId, input.itemId, input.warehouseId);
+  const layers = method === 'FIFO' ? await lockFifoLayers(tx, input.itemId, input.warehouseId) : [];
 
-    // Inbound is method-agnostic: value grows by qty * unit cost. FIFO additionally records a layer.
-    const state = inboundState(currentState(method, row, layers), inQtyUnits, inUnitCostCents);
-    if (method === 'FIFO') {
-      await repo.insertCostLayer(tx, {
-        id: randomUUID(),
-        companyId: input.companyId,
-        itemId: input.itemId,
-        warehouseId: input.warehouseId,
-        quantityRemaining: fromQtyUnits(inQtyUnits),
-        unitCost: fromMinorUnits(inUnitCostCents),
-      });
-    }
-
-    const totalCostCents = valueOfQty(inQtyUnits, inUnitCostCents);
-    const movementId = await persistMovement(tx, {
+  // Inbound is method-agnostic: value grows by qty * unit cost. FIFO additionally records a layer.
+  const state = inboundState(currentState(method, row, layers), inQtyUnits, inUnitCostCents);
+  if (method === 'FIFO') {
+    await repo.insertCostLayer(tx, {
+      id: randomUUID(),
       companyId: input.companyId,
       itemId: input.itemId,
       warehouseId: input.warehouseId,
-      movementType: MOVEMENT_TYPES.STOCK_IN,
-      quantityUnits: inQtyUnits,
-      unitCostCents: inUnitCostCents,
-      totalCostCents,
-      state,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      batchNo: input.batchNo,
-      userId: input.userId,
-    });
-
-    await insertSerials(tx, input.companyId, input.itemId, input.warehouseId, input.batchNo, input.serialNumbers);
-    await writeOutboxEvent(tx, {
-      eventType: OUTBOX_EVENT_TYPES.STOCK_IN,
-      aggregateType: 'item',
-      aggregateId: input.itemId,
-      payload: { movementId, warehouseId: input.warehouseId, quantity: input.quantity },
-    });
-    await writeAuditLog(tx, {
-      companyId: input.companyId,
-      userId: input.userId,
-      action: 'STOCK_IN',
-      entityType: 'stock_movement',
-      entityId: movementId,
-      stateAfter: { itemId: input.itemId, quantity: input.quantity, onHand: serializeState(state).onHand },
-    });
-
-    return {
-      movementId,
-      onHand: serializeState(state).onHand,
+      quantityRemaining: fromQtyUnits(inQtyUnits),
       unitCost: fromMinorUnits(inUnitCostCents),
-      totalCost: fromMinorUnits(totalCostCents),
-    };
+    });
+  }
+
+  const totalCostCents = valueOfQty(inQtyUnits, inUnitCostCents);
+  const movementId = await persistMovement(tx, {
+    companyId: input.companyId,
+    itemId: input.itemId,
+    warehouseId: input.warehouseId,
+    movementType: MOVEMENT_TYPES.STOCK_IN,
+    quantityUnits: inQtyUnits,
+    unitCostCents: inUnitCostCents,
+    totalCostCents,
+    state,
+    referenceType: input.referenceType,
+    referenceId: input.referenceId,
+    batchNo: input.batchNo,
+    userId: input.userId,
   });
+
+  await insertSerials(tx, input.companyId, input.itemId, input.warehouseId, input.batchNo, input.serialNumbers);
+  await writeOutboxEvent(tx, {
+    eventType: OUTBOX_EVENT_TYPES.STOCK_IN,
+    aggregateType: 'item',
+    aggregateId: input.itemId,
+    payload: { movementId, warehouseId: input.warehouseId, quantity: input.quantity },
+  });
+  await writeAuditLog(tx, {
+    companyId: input.companyId,
+    userId: input.userId,
+    action: 'STOCK_IN',
+    entityType: 'stock_movement',
+    entityId: movementId,
+    stateAfter: { itemId: input.itemId, quantity: input.quantity, onHand: serializeState(state).onHand },
+  });
+
+  return {
+    movementId,
+    onHand: serializeState(state).onHand,
+    unitCost: fromMinorUnits(inUnitCostCents),
+    totalCost: fromMinorUnits(totalCostCents),
+  };
 }
 
 async function fifoOutbound(
