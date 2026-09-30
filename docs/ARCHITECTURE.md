@@ -355,17 +355,21 @@ DILARANG circular dependency. Antar-modul hanya via `index.ts`.
 | T5 Schema IAM/Org/Finance + migrasi | ✅ | 20 tabel, migrasi `0000_silky_cammi.sql` ter-generate |
 | T6-T9 IAM (auth/users/company/rbac/audit/outbox/doc-number) | ✅ | tsc 0 |
 | T10-T12 Finance (COA, journal engine, reports) | ✅ | unit test journal + money hijau |
-| T13 Approval rules (tabel + skema) | ⏳ | tabel ada; endpoint approval belum (P0a sisa) |
+| T13 Approval rules (engine submit/approve/reject multi-tier) | ✅ | smoke test 2-tier hijau |
 | T14 Outbox relay + RabbitMQ publisher singleton | ✅ | tsc 0 |
-| T15-T17 Frontend (shell, auth, dashboard, finance) | ✅ | `vite build` sukses |
-| T18 Verifikasi Tier 1 | ✅ | typecheck 0, 11 unit test pass, build sukses |
-| T18 Verifikasi Tier 2 (migrasi nyata) | ⏳ | **BLOCKED**: Docker daemon/MySQL belum tersedia |
+| T15-T17 Frontend (shell, auth, dashboard, COA/Jurnal/Laporan) | ✅ | `vite build` sukses |
+| T18 Verifikasi Tier 1 | ✅ | typecheck 0, 17 unit test pass, build sukses |
+| T18 Verifikasi Tier 2 (migrasi + smoke DB nyata) | ✅ | MySQL 8.4.3; 21 tabel; DB smoke + API smoke hijau |
 
 ### Blocker Terbuka
-- **Tier 2 belum dijalankan**: Docker Desktop tidak aktif dan MySQL tidak terpasang native di `127.0.0.1:3306`. Migrasi & smoke test DB harus dijalankan saat infra tersedia.
-- **T13 sisa**: endpoint approval matrix (submit/approve/reject) belum diimplementasi di slice ini.
+- **Tidak ada.** Redis/RabbitMQ (docker-compose) belum dijalankan, tetapi tidak dibutuhkan untuk Tier 2; relay outbox baru aktif saat broker tersedia.
+
+### Catatan Environment
+- **MySQL lokal via Laragon 8.4.3** di `127.0.0.1:3306` (root tanpa password), database `erp`. `docker-compose.yml` menyediakan MySQL/Redis/RabbitMQ untuk deployment; JANGAN menjalankan service MySQL compose saat Laragon memakai port 3306 (bentrok).
+- Seed: `bun run db:seed` → company `DEMO`, admin `admin@erp.local` / `admin12345`, 10 akun COA.
 
 ### Bug terarsip (Harvester Gate)
 - `BUG-20260930-01` pino-pretty transport hang di bun test
 - `BUG-20260930-02` TypeScript 7 hapus `baseUrl`
 - `BUG-20260930-03` import path spec co-located
+- `BUG-20260930-04` domain validation plain Error → 500 (harus 422)
