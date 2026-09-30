@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — ERP Modular (Retail/Distribusi)
 
-> Status: **DRAFT — MENUNGGU GERBANG 2 (Architecture & Plan Approval)**
+> Status: **APPROVED ✅ (Gerbang 2 lulus) — Slice P0a SELESAI diimplementasi (kode di `backend/` & `frontend/`)**
 > Bahasa: Indonesia (istilah teknis/identifier tetap English).
 > Basis: `docs/PRD.md` (APPROVED), `docs/RESEARCH.md`, `docs/ADR/`.
 > Versi: 1.0.0 · Fase: 4 (Task Decomposition & Architecture Planning)
@@ -341,3 +341,31 @@ DILARANG circular dependency. Antar-modul hanya via `index.ts`.
 ---
 
 > **Catatan Gerbang 2:** Rencana ini mencakup ≥ 3 file → **WAJIB STOP & WAIT**. DILARANG menulis kode sebelum operator menyetujui.
+
+---
+
+## 10. Status Implementasi Slice P0a (Per 2026-09-30)
+
+| Task | Status | Bukti |
+|---|---|---|
+| T1 Bootstrap backend | ✅ | `bunx tsc --noEmit` = 0 |
+| T2 docker-compose infra | ✅ (file) | `docker compose up` **TERTUNDA** (daemon mati) |
+| T3 Core errors/response/logger | ✅ | test hijau |
+| T4 DB client + shared schema | ✅ | 5 tabel |
+| T5 Schema IAM/Org/Finance + migrasi | ✅ | 20 tabel, migrasi `0000_silky_cammi.sql` ter-generate |
+| T6-T9 IAM (auth/users/company/rbac/audit/outbox/doc-number) | ✅ | tsc 0 |
+| T10-T12 Finance (COA, journal engine, reports) | ✅ | unit test journal + money hijau |
+| T13 Approval rules (tabel + skema) | ⏳ | tabel ada; endpoint approval belum (P0a sisa) |
+| T14 Outbox relay + RabbitMQ publisher singleton | ✅ | tsc 0 |
+| T15-T17 Frontend (shell, auth, dashboard, finance) | ✅ | `vite build` sukses |
+| T18 Verifikasi Tier 1 | ✅ | typecheck 0, 11 unit test pass, build sukses |
+| T18 Verifikasi Tier 2 (migrasi nyata) | ⏳ | **BLOCKED**: Docker daemon/MySQL belum tersedia |
+
+### Blocker Terbuka
+- **Tier 2 belum dijalankan**: Docker Desktop tidak aktif dan MySQL tidak terpasang native di `127.0.0.1:3306`. Migrasi & smoke test DB harus dijalankan saat infra tersedia.
+- **T13 sisa**: endpoint approval matrix (submit/approve/reject) belum diimplementasi di slice ini.
+
+### Bug terarsip (Harvester Gate)
+- `BUG-20260930-01` pino-pretty transport hang di bun test
+- `BUG-20260930-02` TypeScript 7 hapus `baseUrl`
+- `BUG-20260930-03` import path spec co-located
