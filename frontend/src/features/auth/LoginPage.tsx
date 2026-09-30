@@ -39,9 +39,11 @@ export function LoginPage() {
           id="companyId"
           value={companyId}
           onChange={(event) => setCompanyId(event.target.value)}
-          className="mb-4 w-full rounded-[var(--radius-base)] border border-border px-3 py-2"
-          placeholder="UUID perusahaan"
+          required
+          className="mb-1 w-full rounded-[var(--radius-base)] border border-border px-3 py-2"
+          placeholder="00000000-0000-4000-8000-000000000001"
         />
+        <p className="mb-4 text-xs text-muted">UUID perusahaan. Untuk data demo: 00000000-0000-4000-8000-000000000001</p>
 
         <label className="mb-1 block text-sm text-muted" htmlFor="email">
           Email

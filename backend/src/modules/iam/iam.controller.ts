@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { ValidationError } from '../../core/errors/app-error.ts';
 import { ok } from '../../core/http/response.ts';
 import { env } from '../../core/config/env.ts';
 import * as service from './iam.service.ts';
@@ -13,7 +14,10 @@ interface CompanyParams {
 
 export async function loginHandler(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const body = loginSchema.parse(request.body);
-  const companyId = (request.headers['x-company-id'] as string | undefined) ?? '';
+  const companyId = ((request.headers['x-company-id'] as string | undefined) ?? '').trim();
+  if (!companyId) {
+    throw new ValidationError('Company ID wajib diisi', [{ field: 'x-company-id', issue: 'Header X-Company-Id kosong' }]);
+  }
   const result = await service.login(companyId, body);
 
   reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
