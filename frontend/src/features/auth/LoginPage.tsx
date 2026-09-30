@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 
 import { useAuth } from './auth-context.tsx';
+import { IconBuilding, IconSparkles } from '../../shared/components/icons.tsx';
 
 const DEMO_COMPANY_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -33,101 +34,117 @@ export function LoginPage() {
     setCompanyId(DEMO_COMPANY_ID);
     setEmail('admin@erp.local');
     setPassword('admin12345');
+    setError(null);
   }
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
-      <section className="relative hidden flex-col justify-between bg-ink px-12 py-14 text-white lg:flex">
-        <p className="font-mono text-xs tracking-[0.24em] text-white/50">ERP · RETAIL / DISTRIBUSI</p>
+    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 sm:px-6 lg:px-8">
+      {/* Subtle modern ambient background glow */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-purple-500/10 blur-3xl" />
+      </div>
 
-        <div className="max-w-md">
-          <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight">
-            Satu sumber kebenaran untuk seluruh operasi.
-          </h1>
-          <p className="mt-5 text-base leading-relaxed text-white/60">
-            Persediaan, pengadaan, penjualan, dan pembukuan dalam satu alur yang dapat diaudit —
-            dari dokumen hingga jurnal.
-          </p>
+      <div className="relative w-full max-w-md">
+        {/* Card */}
+        <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl shadow-slate-200/60 sm:p-10">
+          {/* Header */}
+          <div className="flex flex-col items-center text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/30">
+              <IconBuilding className="h-6 w-6" />
+            </div>
+            <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">
+              KONTROL ERP
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Sistem Operasional Retail & Distribusi
+            </p>
+          </div>
+
+          {/* Quick Demo Fill Button */}
+          <button
+            type="button"
+            onClick={fillDemo}
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-xs font-semibold text-indigo-700 transition-all hover:bg-indigo-100 hover:text-indigo-800"
+          >
+            <IconSparkles className="h-3.5 w-3.5" />
+            <span>Klik di sini untuk mengisi akun demo otomatis</span>
+          </button>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700" htmlFor="companyId">
+                ID Perusahaan (Company ID)
+              </label>
+              <div className="mt-1.5">
+                <input
+                  id="companyId"
+                  value={companyId}
+                  onChange={(event) => setCompanyId(event.target.value)}
+                  required
+                  className="field font-mono text-xs"
+                  placeholder="00000000-0000-4000-8000-000000000001"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700" htmlFor="email">
+                Alamat Email
+              </label>
+              <div className="mt-1.5">
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  className="field text-sm"
+                  placeholder="nama@perusahaan.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700" htmlFor="password">
+                Kata Sandi
+              </label>
+              <div className="mt-1.5">
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  className="field text-sm"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {error ? (
+              <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700">
+                {error}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="btn-primary mt-2 w-full py-2.5 text-sm"
+            >
+              {isSubmitting ? 'Memproses Masuk…' : 'Masuk ke Sistem'}
+            </button>
+          </form>
         </div>
 
-        <dl className="grid grid-cols-3 gap-6 border-t border-white/10 pt-6 font-mono text-xs text-white/50">
-          <div>
-            <dt className="text-white/40">Persediaan</dt>
-            <dd className="mt-1 text-white/70">Moving Average</dd>
-          </div>
-          <div>
-            <dt className="text-white/40">Mata Uang</dt>
-            <dd className="mt-1 text-white/70">IDR · PPN</dd>
-          </div>
-          <div>
-            <dt className="text-white/40">Jejak</dt>
-            <dd className="mt-1 text-white/70">Append-only</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="flex items-center justify-center px-6 py-12">
-        <form onSubmit={handleSubmit} className="w-full max-w-sm">
-          <h2 className="text-2xl font-semibold tracking-tight">Masuk</h2>
-          <p className="mt-1 text-sm text-muted">Gunakan kredensial perusahaan Anda.</p>
-
-          <div className="mt-8 flex flex-col gap-4">
-            <label className="flex flex-col gap-1.5 text-sm font-medium" htmlFor="companyId">
-              Company ID
-              <input
-                id="companyId"
-                value={companyId}
-                onChange={(event) => setCompanyId(event.target.value)}
-                required
-                className="field font-mono text-xs"
-                placeholder={DEMO_COMPANY_ID}
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm font-medium" htmlFor="email">
-              Email
-              <input
-                id="email"
-                type="email"
-                autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                className="field"
-                placeholder="nama@perusahaan.id"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1.5 text-sm font-medium" htmlFor="password">
-              Password
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                className="field"
-                placeholder="••••••••"
-              />
-            </label>
-          </div>
-
-          {error ? (
-            <p role="alert" className="mt-4 rounded-base border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger">
-              {error}
-            </p>
-          ) : null}
-
-          <button type="submit" disabled={isSubmitting} className="btn-primary mt-6 w-full">
-            {isSubmitting ? 'Memproses…' : 'Masuk'}
-          </button>
-
-          <button type="button" onClick={fillDemo} className="mt-3 w-full text-center text-xs text-muted hover:text-text">
-            Isi kredensial demo
-          </button>
-        </form>
-      </section>
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Single Source of Truth • Append-only Ledger • Real-time GL
+        </p>
+      </div>
     </div>
   );
 }

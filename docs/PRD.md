@@ -382,28 +382,28 @@ Fitur dinyatakan selesai bila:
 
 ### 7.1 Design Token
 
-**Palet warna ("Ink & Ledger" — konsol keuangan retail/distribusi, sengaja menghindari biru SaaS generik):**
+**Palet warna (Modern Enterprise Slate & Royal Indigo):**
 | Token | Nilai | Pemakaian |
 |---|---|---|
-| `--color-ink` | `#0B1220` | Sidebar, panel gelap (chrome) |
-| `--color-ink-soft` | `#1A2336` | Elevasi di atas ink |
-| `--color-canvas` | `#EEF1F5` | Latar halaman (dingin, bukan cream) |
-| `--color-surface` | `#FFFFFF` | Panel, tabel |
-| `--color-border` | `#D6DDE6` | Garis rambut pemisah |
-| `--color-text` | `#101826` | Teks utama |
-| `--color-muted` | `#5B6675` | Teks sekunder |
-| `--color-accent` | `#0F766E` (teal-700) | Aksen tanda tangan: tombol utama, angka uang |
-| `--color-success` | `#15803D` | Status APPROVED/POSTED |
-| `--color-warning` | `#B45309` | PENDING, MATCH_EXCEPTION |
-| `--color-danger` | `#B91C1C` | REJECTED, void, error |
+| `--color-canvas` | `#F8FAFC` (slate-50) | Latar halaman kanvas bersih |
+| `--color-surface` | `#FFFFFF` | Permukaan kartu, tabel, formulir |
+| `--color-border` | `#E2E8F0` (slate-200) | Border bersih |
+| `--color-text` | `#0F172A` (slate-900) | Teks utama tegas |
+| `--color-muted` | `#64748B` (slate-500) | Teks sekunder |
+| `--color-subtle` | `#94A3B8` (slate-400) | Placeholder & ikon netral |
+| `--color-primary` | `#4F46E5` (indigo-600) | Tombol utama, branding, active pills |
+| `--color-primary-hover` | `#4338CA` (indigo-700) | Hover tombol utama |
+| `--color-success` | `#10B981` (emerald-500) | Status SEIMBANG, APPROVED, aktif |
+| `--color-warning` | `#F59E0B` (amber-500) | Status PENDING, selisih jurnal |
+| `--color-danger` | `#EF4444` (rose-500) | Status REJECTED, error |
 
-**Tipografi:** `Inter Tight` (UI), monospace `JetBrains Mono` untuk angka/kode.
+**Tipografi:** `Plus Jakarta Sans` (UI modern, geometric neo-grotesque), monospace `JetBrains Mono` untuk angka/kode.
 - Skala: `--text-xs 12px`, `--text-sm 14px`, `--text-base 16px`, `--text-lg 18px`, `--text-xl 24px`, `--text-2xl 30px`.
 - Angka uang pakai `font-variant-numeric: tabular-nums` (kelas `.tabular`).
 
-**Spacing:** basis 4px (`4/8/12/16/24/32/48`). Radius: `--radius-base 6px`, `--radius-lg 10px`. Garis rambut (`border`) menggantikan shadow lembut — hindari "kartu SaaS" seragam.
+**Spacing & Radius:** basis 4px (`4/8/12/16/24/32/48`). Radius modern: `--radius-sm 6px`, `--radius-md 10px`, `--radius-lg 14px`. Bayangan modern halus (`shadow-xs` / `shadow-sm`).
 
-**Aksesibilitas:** focus ring teal jelas (`:focus-visible`), kontras WCAG AA, hormati `prefers-reduced-motion`.
+**Aksesibilitas:** focus ring indigo jelas (`:focus-visible`), kontras WCAG AA, hormati `prefers-reduced-motion`.
 
 ### 7.2 Daftar Halaman & Rute
 
