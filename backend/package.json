@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "bun run ../scripts/free-port.ts 3000",
     "dev": "bun run --watch src/server.ts",
     "start": "bun run src/server.ts",
     "typecheck": "bunx tsc --noEmit",
